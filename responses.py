@@ -9,3 +9,6 @@ def handle_response(message) ->str:
     
     if p_message == 'f1!help':
         return 'Tutaj będę wyswietlał dostepne komendy'
+    
+    if p_message.startswith('jebany bot'):
+        return 'Morda cwelu okok'
