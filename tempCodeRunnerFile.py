@@ -1,0 +1,1 @@
+await ctx.send("Nie udało się pobrać informacji o najbliższym wyścigu.")   
