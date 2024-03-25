@@ -52,7 +52,7 @@ def convert_to_Warsaw_time(date_times):
     for czas in date_times:
         h, m = map(int, czas.split(':'))
         h += 1
-        if h == 24:  # Jeśli godzina wynosi 24, to zmieniamy na 00
+        if h == 24:
             h = 0
         new_time = f"{h:02d}:{m:02d}"
         new_times.append(new_time)
@@ -99,10 +99,34 @@ def check_session_status(current_datetime, session_datetime):
     else:
         return "🟢"
 
-def next_session_starts_in():
-    pass
+def next_session_starts_in(current_datetime, session_datetime):\
+    
+    if check_session_status(current_datetime, session_datetime) == "🔴":
+        time_left = session_datetime - current_datetime
+        days = time_left.days
+        hours, remainder = divmod(time_left.seconds, 3600)
+        minutes, _ = divmod(remainder, 60)
+        if days > 0:
+            time_left = f"**{days}d {hours}h {minutes}m**"
+        elif hours > 0:
+            time_left = f"**{hours}h {minutes}m**"
+        else:
+            time_left = f"**{minutes} minut**"
+        upcoming_session = True
+    elif check_session_status(current_datetime, session_datetime) == "🟢":
+        time_left = '**🟢TRWA🟢**'
+        upcoming_session = True
+    else: 
+        time_left = "**⚫KONIEC⚫**" 
+        upcoming_session = False
+        
+    return time_left, upcoming_session
+
+
 
 def run_discord_bot():
+    calendar_url = "https://f1calendar.com/pl"
+    official_schedule = "https://www.formula1.com/en/racing/2024.html"
     intents = discord.Intents.default() # or discord.Intents.all()
     intents.message_content = True
     client = commands.Bot(command_prefix='!', intents = intents)
@@ -125,8 +149,6 @@ def run_discord_bot():
     @commands.cooldown(1, COOLDOWN_SECONDS, commands.BucketType.default)
     
     async def f1(ctx):
-        calendar_url = "https://f1calendar.com/pl"
-        official_schedule = "https://www.formula1.com/en/racing/2024.html"
         response = requests.get(calendar_url)
         soup = BeautifulSoup(response.content, 'html.parser')
         races = soup.find_all("tbody")
@@ -161,7 +183,6 @@ def run_discord_bot():
                 embed.set_thumbnail(url=thumbnail)
                 
                 current_datetime = datetime.now()
-                count_timer = ''
                 upcoming_session = False
                 
                 for session, date, weekday, time in race_week_datetimes:
@@ -172,37 +193,49 @@ def run_discord_bot():
                     embed.add_field(name="", value=f":alarm_clock: **{time}**", inline=True)
                     
                     if not upcoming_session:
-                        if check_session_status(current_datetime, session_datetime) == "🔴":
-                            time_left = session_datetime - current_datetime
-                            hours = time_left.seconds // 3600
-                            minutes = (time_left.seconds % 3600) // 60
-                            time_left = f"{hours} h {minutes} m"
-                            
-                            embed.add_field(name="", value=f':clock1: **Rozpocznie sie za {time_left}**', inline=False)
-                            upcoming_session = True
-
-                        elif check_session_status(current_datetime, session_datetime) == "🟢":
-                            embed.add_field(name="", value=f'**🟢TRWA🟢**', inline=False)
-                            upcoming_session = True
-                        else: 
-                            count_timer = "⚫KONIEC⚫"
-                    
-                    
-                            
+                        time_left, upcoming_session = next_session_starts_in(current_datetime, session_datetime)
+                        embed.add_field(name="", value=f":clock1: Pozostało {time_left}", inline=False)  
+                         
                     embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
-                    
-                print(count_timer)
 
                 await ctx.send(embed=embed)
                 await client.tree.sync()
         else:  
             await client.tree.sync()
     
-    
     @f1.error
     async def f1_error(ctx, error):
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.send(f"Poczekaj {round(error.retry_after)} sekund")
+    
+    
+    @client.hybrid_command(name="results", description="Last session results")
+    async def results(ctx):
+        embed = discord.Embed(title=f"Wyniki ostatiej sesji", color=0xEF1A2D)
+        await ctx.send(embed=embed)
+        await client.tree.sync()
+    
+    
+    @client.hybrid_command(name="standings", description="Current drivers standings")
+    async def results(ctx):
+        standings = "https://www.formula1.com/en/results.html/2024/drivers.html"
+        response = requests.get(standings)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        standings = soup.find("tbody")
+        drivers = standings.find_all("tr")
+        
+        embed = discord.Embed(title=f"Klasyfikacja generalna kierowców", color=0x000000)
+        
+        for driver in drivers:
+            driver_pos = driver.find("td", class_="dark").text
+            driver_name = driver.find('span', class_="hide-for-mobile").text
+            driver_points = driver.find('td', class_="dark bold").text
+            
+            print(f"{driver_pos} | {driver_name} {driver_points} ")
+            embed.add_field(name='**{driver_pos}** 🔴', value=f" {driver_name} **{driver_points}**", inline=False)
+            
+        await ctx.send(embed=embed)
+        await client.tree.sync()
     
     
     @client.event
