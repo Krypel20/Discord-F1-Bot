@@ -1,10 +1,8 @@
-import discord
+import discord, requests, asyncio, os
 from discord import Interaction
-from discord.ext import commands
-import requests
+from discord.ext import commands, tasks
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-import os
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -46,6 +44,9 @@ flags_emojis = {
     "abu-dhabi-grand-prix": ":flag_ae:"
 }
 
+#nadchodzace sesje
+upcoming_session_name = ''
+upcoming_session_datetime = ''
 
 def convert_to_Warsaw_time(date_times):
     new_times = []
@@ -99,7 +100,7 @@ def check_session_status(current_datetime, session_datetime):
     else:
         return "🟢"
 
-def next_session_starts_in(current_datetime, session_datetime):\
+def next_session_starts_in(current_datetime, session_datetime):
     
     if check_session_status(current_datetime, session_datetime) == "🔴":
         time_left = session_datetime - current_datetime
@@ -114,7 +115,7 @@ def next_session_starts_in(current_datetime, session_datetime):\
             time_left = f"**{minutes} minut**"
         upcoming_session = True
     elif check_session_status(current_datetime, session_datetime) == "🟢":
-        time_left = '**🟢TRWA🟢**'
+        time_left = '**🟢AKTUALNIE TRWA🟢**'
         upcoming_session = True
     else: 
         time_left = "**⚫KONIEC⚫**" 
@@ -122,32 +123,45 @@ def next_session_starts_in(current_datetime, session_datetime):\
         
     return time_left, upcoming_session
 
-
-
 def run_discord_bot():
     calendar_url = "https://f1calendar.com/pl"
     official_schedule = "https://www.formula1.com/en/racing/2024.html"
     intents = discord.Intents.default() # or discord.Intents.all()
     intents.message_content = True
     client = commands.Bot(command_prefix='!', intents = intents)
+    
+    async def background_task():
+        channel = client.get_channel(1104824672098451487)
+        current_datetime = datetime.now()
+        #function_that_returns_timeleft_to_session_start
+        # print(days_left)
+        
+        #przykładowy schemat działania kodu
+        while True:
+            if upcoming_session_name == 'FP1' and days_left < 5 and flag is False:
+                await channel.send("🏁 IT'S RACE WEEK 🏁")
+            else: await channel.send(":( IT IS NOT A RACE WEEK :(")
+            
+            await asyncio.sleep(100) 
 
     @client.event
     async def on_ready():
         await client.tree.sync()
         await client.change_presence(activity=discord.activity.Game(name="FORZA FERRARI"), status=discord.Status.do_not_disturb)
         print(f'{client.user.name} is now running!')
-    
+        
+        #starting asynchronous functions to run in the background
+        # asyncio.create_task(background_task())
+        
     @client.hybrid_command(name="ping", description="It will show my ping")
     async def ping(interacion : Interaction):
         bot_latency = round(client.latency*1000)
         await interacion.send(f"PING! {bot_latency} ms")
         await client.tree.sync()
     
-    
     COOLDOWN_SECONDS = 10
     @client.hybrid_command(name="f1", description="Info about current race week")
     @commands.cooldown(1, COOLDOWN_SECONDS, commands.BucketType.default)
-    
     async def f1(ctx):
         response = requests.get(calendar_url)
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -177,13 +191,15 @@ def run_discord_bot():
                 date_times = convert_to_Warsaw_time(date_times)
                 
                 race_week_datetimes = list(zip(sessions_name, dates, weekdays, date_times))
-                embed = discord.Embed(title=f"{get_flag_emoji(race_id)} {race_name} {get_flag_emoji(race_id)} ‏ ‏ ‎ ‎ ‎ {week_start} - {week_end} ", color=0xEF1A2D)
+                embed = discord.Embed(title=f"{get_flag_emoji(race_id)} {race_name} {get_flag_emoji(race_id)} ‏ ‎ ‎ ‎ :calendar:{week_start} - {week_end} ", color=0xEF1A2D)
                 thumbnail = "https://cdn.discordapp.com/emojis/734895858725683314.webp?size=96&quality=lossless"
                 embed.add_field(name="", value="", inline=False)
                 embed.set_thumbnail(url=thumbnail)
                 
                 current_datetime = datetime.now()
                 upcoming_session = False
+                
+                print(race_week_datetimes)
                 
                 for session, date, weekday, time in race_week_datetimes:
                     session_datetime = datetime.strptime(f"{date} {time} {current_datetime.year}", "%d %b %H:%M %Y")
@@ -194,20 +210,17 @@ def run_discord_bot():
                     
                     if not upcoming_session:
                         time_left, upcoming_session = next_session_starts_in(current_datetime, session_datetime)
-                        embed.add_field(name="", value=f":clock1: Pozostało {time_left}", inline=False)  
+                        embed.add_field(name="", value=f":clock1: Pozostało {time_left}", inline=False)
                          
                     embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
 
-                await ctx.send(embed=embed)
-                await client.tree.sync()
-        else:  
-            await client.tree.sync()
+        await ctx.send(embed=embed)
+        await client.tree.sync()
     
     @f1.error
     async def f1_error(ctx, error):
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.send(f"Poczekaj {round(error.retry_after)} sekund")
-    
     
     @client.hybrid_command(name="results", description="Last session results")
     async def results(ctx):
@@ -215,14 +228,13 @@ def run_discord_bot():
         await ctx.send(embed=embed)
         await client.tree.sync()
     
-    
     @client.hybrid_command(name="standings", description="Current drivers standings")
     async def results(ctx):
-        standings = "https://www.formula1.com/en/results.html/2024/drivers.html"
-        response = requests.get(standings)
+        standings_url = "https://www.formula1.com/en/results.html/2024/drivers.html"
+        response = requests.get(standings_url)
         soup = BeautifulSoup(response.content, 'html.parser')
-        standings = soup.find("tbody")
-        drivers = standings.find_all("tr")
+        standings_url = soup.find("tbody")
+        drivers = standings_url.find_all("tr")
         
         embed = discord.Embed(title=f"Klasyfikacja generalna kierowców", color=0x000000)
         
@@ -232,11 +244,10 @@ def run_discord_bot():
             driver_points = driver.find('td', class_="dark bold").text
             
             print(f"{driver_pos} | {driver_name} {driver_points} ")
-            embed.add_field(name='**{driver_pos}** 🔴', value=f" {driver_name} **{driver_points}**", inline=False)
+            embed.add_field(name=f'', value=f"**{driver_pos}** 🔴 {driver_name} **{driver_points}**", inline=False)
             
         await ctx.send(embed=embed)
         await client.tree.sync()
-    
     
     @client.event
     async def on_message(message):
@@ -254,5 +265,5 @@ def run_discord_bot():
             await send_message(message, user_message, is_private=True)
         else:
             await send_message(message, user_message, is_private=False)
-     
+    
     client.run(TOKEN)

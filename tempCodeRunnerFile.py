@@ -1,1 +1,2 @@
-await ctx.send(embed=embed)
+
+load_dotenv()
