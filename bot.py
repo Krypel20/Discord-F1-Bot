@@ -1,6 +1,7 @@
 import discord, requests, asyncio, os
 from discord import Interaction
 from discord.ext import commands, tasks
+from discord.ui import Button, View
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -125,7 +126,6 @@ def next_session_starts_in(current_datetime, session_datetime):
 
 def run_discord_bot():
     calendar_url = "https://f1calendar.com/pl"
-    official_schedule = "https://www.formula1.com/en/racing/2024.html"
     intents = discord.Intents.default() # or discord.Intents.all()
     intents.message_content = True
     client = commands.Bot(command_prefix='!', intents = intents)
@@ -133,7 +133,7 @@ def run_discord_bot():
     async def background_task():
         channel = client.get_channel(1104824672098451487)
         current_datetime = datetime.now()
-        #function_that_returns_timeleft_to_session_start
+        # function_that_returns_timeleft_to_session_start
         # print(days_left)
         
         #przykładowy schemat działania kodu
@@ -213,7 +213,7 @@ def run_discord_bot():
                         embed.add_field(name="", value=f":clock1: Pozostało {time_left}", inline=False)
                          
                     embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
-
+            
         await ctx.send(embed=embed)
         await client.tree.sync()
     
@@ -228,25 +228,54 @@ def run_discord_bot():
         await ctx.send(embed=embed)
         await client.tree.sync()
     
-    @client.hybrid_command(name="standings", description="Current drivers standings")
-    async def results(ctx):
-        standings_url = "https://www.formula1.com/en/results.html/2024/drivers.html"
-        response = requests.get(standings_url)
-        soup = BeautifulSoup(response.content, 'html.parser')
-        standings_url = soup.find("tbody")
-        drivers = standings_url.find_all("tr")
+    @client.hybrid_command(name="standings", description="Current driver/constructor standings")
+    async def standings(ctx):
+        button_teams = Button(label="Konstruktorzy", style=discord.ButtonStyle.green, emoji="⚙️")
+        button_drivers = Button(label="Kierowcy", style=discord.ButtonStyle.green, emoji="🏎️")
+        view = View()
+         
+        async def button_drivers_callback(interacion):
+            driver_standings_url = "https://www.formula1.com/en/results.html/2024/drivers.html"
+            embed = discord.Embed(title=f"Klasyfikacja generalna kierowców", color=0x000000)
+            response = requests.get(driver_standings_url)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            driver_standings_url = soup.find("tbody")
+            drivers = driver_standings_url.find_all("tr")
         
-        embed = discord.Embed(title=f"Klasyfikacja generalna kierowców", color=0x000000)
+            for driver in drivers:
+                driver_pos = driver.find("td", class_="dark").text
+                driver_name = driver.find('span', class_="hide-for-mobile").text
+                driver_points = driver.find('td', class_="dark bold").text
+                
+                print(f"{driver_pos} | {driver_name} {driver_points} ")
+                embed.add_field(name=f'', value=f"**{driver_pos}** 🔴 {driver_name} **{driver_points}**", inline=False)
+            
+            await interacion.response.edit_message(embed=embed, view=view)
         
-        for driver in drivers:
-            driver_pos = driver.find("td", class_="dark").text
-            driver_name = driver.find('span', class_="hide-for-mobile").text
-            driver_points = driver.find('td', class_="dark bold").text
+        async def button_teams_callback(interacion):
+            team_standings_url = "https://www.formula1.com/en/results.html/2024/team.html"
+            embed = discord.Embed(title=f"Klasyfikacja generalna kierowców", color=0x000000)
+            response = requests.get(team_standings_url)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            team_standings_url = soup.find("tbody")
+            teams = team_standings_url.find_all("tr")
             
-            print(f"{driver_pos} | {driver_name} {driver_points} ")
-            embed.add_field(name=f'', value=f"**{driver_pos}** 🔴 {driver_name} **{driver_points}**", inline=False)
+            for team in teams:
+                team_pos = team.find("td", class_="dark").text
+                team_name = team.find('a').text
+                team_points = team.find('td', class_="dark bold").text
+                
+                print(f"{team_pos} | {team_name} {team_points} ")
+                embed.add_field(name=f'', value=f"**{team_pos}** 🔴 {team_name} **{team_points}**", inline=False)
             
-        await ctx.send(embed=embed)
+            await interacion.response.edit_message(embed=embed, view=view)
+        
+        button_teams.callback = button_teams_callback
+        button_drivers.callback = button_drivers_callback
+        view.add_item(button_teams)
+        view.add_item(button_drivers)
+        
+        await ctx.send(view=view)
         await client.tree.sync()
     
     @client.event
