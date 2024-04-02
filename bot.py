@@ -9,6 +9,7 @@ load_dotenv()
 
 #custom imports
 TOKEN = os.getenv('TOKEN')
+announcements_channel_id = 1104824672098451487
 from async_commands import send_message
 
 
@@ -45,9 +46,50 @@ flags_emojis = {
     "abu-dhabi-grand-prix": ":flag_ae:"
 }
 
-#nadchodzace sesje
-upcoming_session_name = ''
-upcoming_session_datetime = ''
+race_place_html_adress = {
+    "bahrain-grand-prix": "1229/bahrain",
+    "saudi-arabia-grand-prix": "1230/saudi-arabia",
+    "australian-grand-prix": "1231/australia",
+    "japanese-grand-prix": "1232/japan",
+    "chinese-grand-prix": "1233/china",
+    "miami-grand-prix": "1234/miami",
+    "emilia-romagna-grand-prix": "1235/italy",
+    "monaco-grand-prix": "1236/monaco",
+    "canadian-grand-prix": "1237/canada",
+    "spanish-grand-prix": "1238/spain",
+    "austrian-grand-prix": "1239/austria",
+    "british-grand-prix": "1240/great-britain",
+    "hungarian-grand-prix": "1241/hungary",
+    "belgian-grand-prix": "1242/belgium",
+    "dutch-grand-prix": "1243/netherlands",
+    "italian-grand-prix": "1244/italy",
+    "azerbaijan-grand-prix": "1245/azerbaijan",
+    "singapore-grand-prix": "1246/singapore",
+    "us-grand-prix": "1247/united-states",
+    "mexican-grand-prix": "1248/mexico",
+    "brazilian-grand-prix": "1249/brazil",
+    "las-vegas-grand-prix": "1250/las-vegas",
+    "qatar-grand-prix": "1251/qatar",
+    "abu-dhabi-grand-prix": "1252/abu-dhabi"
+}
+
+def current_race_html():
+    calendar_url = "https://f1calendar.com/pl"
+    response = requests.get(calendar_url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    races = soup.find_all("tbody")
+    
+    for race in races:
+        race_status = race.find("span", string="Nadchodzący")
+    
+        if race_status:   
+            return race
+        
+def current_race_results_url_id():
+    race = current_race_html()
+    race_id = race.get('id')
+    get_current_race = lambda race_id: race_place_html_adress.get(race_id, ":question:")
+    return get_current_race(race_id)
 
 def convert_to_Warsaw_time(date_times):
     new_times = []
@@ -124,25 +166,56 @@ def next_session_starts_in(current_datetime, session_datetime):
         
     return time_left, upcoming_session
 
+def remaining_time_to_next_session(current_datetime):
+    race = current_race_html()
+    dates = race.find_all('td', class_="text-right md:text-left")
+    date_times = race.find_all('div', class_="text-right md:text-left pr-2 md:pr-0", string=True)
+    race_name = race.find("span", class_='').text.upper()
+    sessions_name = ["FP1 " + race_name, "FP2 " + race_name, "FP3 " + race_name, "QUALI " + race_name, "WYŚCIG " + race_name]
+
+    dates = [date.text for date in dates]
+    date_times = [time.text for time in date_times]
+    date_times = convert_to_Warsaw_time(date_times)
+    race_week_datetimes = list(zip(sessions_name, dates, date_times))
+    
+    for session, date, time in race_week_datetimes:
+        session_datetime = datetime.strptime(f"{date} {time} {current_datetime.year}", "%d %b %H:%M %Y")
+        time_difference = session_datetime - current_datetime
+        
+        print(f"{session} remaining time:", time_difference.total_seconds())
+        
+        if 0 < time_difference.total_seconds() <= (3600*64):
+            print(f'{session} odbedzie sie w ciągu {time_difference}')
+            return time_difference.total_seconds() , session
+    
+    return 0, ''
+
 def run_discord_bot():
-    calendar_url = "https://f1calendar.com/pl"
     intents = discord.Intents.default() # or discord.Intents.all()
     intents.message_content = True
     client = commands.Bot(command_prefix='!', intents = intents)
     
     async def background_task():
-        channel = client.get_channel(1104824672098451487)
+        channel = client.get_channel(announcements_channel_id)
         current_datetime = datetime.now()
-        # function_that_returns_timeleft_to_session_start
-        # print(days_left)
+        last_session_name = ''
+        cooldown = 15
+        print(f"rozpoczęcie background task")
         
-        #przykładowy schemat działania kodu
         while True:
-            if upcoming_session_name == 'FP1' and days_left < 5 and flag is False:
-                await channel.send("🏁 IT'S RACE WEEK 🏁")
-            else: await channel.send(":( IT IS NOT A RACE WEEK :(")
+            print(f"rozpoczęcie pętli, cooldown: {cooldown}")
+            remaining_time, session_name = remaining_time_to_next_session(current_datetime)
+            current_datetime = datetime.now()
             
-            await asyncio.sleep(100) 
+            if 0 < remaining_time and last_session_name != session_name:
+                await channel.send(f":checkered_flag: **{session_name}** ZACZNIE SIĘ W CIAGU **{int(remaining_time/3600)} GODZINY**:checkered_flag:")
+                print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time}")
+                last_session_name = session_name
+                cooldown = 10800
+                await asyncio.sleep(cooldown)
+            else:
+                cooldown = 15
+                await asyncio.sleep(cooldown)
 
     @client.event
     async def on_ready():
@@ -151,7 +224,7 @@ def run_discord_bot():
         print(f'{client.user.name} is now running!')
         
         #starting asynchronous functions to run in the background
-        # asyncio.create_task(background_task())
+        asyncio.create_task(background_task())
         
     @client.hybrid_command(name="ping", description="It will show my ping")
     async def ping(interacion : Interaction):
@@ -163,56 +236,48 @@ def run_discord_bot():
     @client.hybrid_command(name="f1", description="Info about current race week")
     @commands.cooldown(1, COOLDOWN_SECONDS, commands.BucketType.default)
     async def f1(ctx):
-        response = requests.get(calendar_url)
-        soup = BeautifulSoup(response.content, 'html.parser')
-        races = soup.find_all("tbody")
+        race = current_race_html()
+        race_id = race.get('id')
+        get_flag_emoji = lambda race_id: flags_emojis.get(race_id, ":question:")
+        dates = race.find_all('td', class_="text-right md:text-left")
+        date_times = race.find_all('div', class_="text-right md:text-left pr-2 md:pr-0", string=True)
         
-        for race in races:
-            race_status = race.find("span", string="Nadchodzący")
-            race_id = race.get('id')
-            get_flag_emoji = lambda race_id: flags_emojis.get(race_id, ":question:")
-            
-            if race_status:
-                race_name = race.find("span", class_='').text
-                dates = race.find_all('td', class_="text-right md:text-left")
-                date_times = race.find_all('div', class_="text-right md:text-left pr-2 md:pr-0", string=True)
-                
-                race_name = race.find("span", class_='').text
-                sessions_name = ["FP1", "FP2", "FP3", "Kwalifikacje", "Wyścig"]
+        race_name = race.find("span", class_='').text
+        sessions_name = ["FP1", "FP2", "FP3", "Kwalifikacje", "Wyścig"]
 
-                dates = [date.text for date in dates]
-                
-                datesPL = convert_date_to_polish_months(dates)
-                week_start = datesPL[0]
-                week_end = datesPL[-1]
-                
-                weekdays = convert_date_to_weekday(dates)
-                date_times = [time.text for time in date_times]
-                date_times = convert_to_Warsaw_time(date_times)
-                
-                race_week_datetimes = list(zip(sessions_name, dates, weekdays, date_times))
-                embed = discord.Embed(title=f"{get_flag_emoji(race_id)} {race_name} {get_flag_emoji(race_id)} ‏ ‎ ‎ ‎ :calendar:{week_start} - {week_end} ", color=0xEF1A2D)
-                thumbnail = "https://cdn.discordapp.com/emojis/734895858725683314.webp?size=96&quality=lossless"
-                embed.add_field(name="", value="", inline=False)
-                embed.set_thumbnail(url=thumbnail)
-                
-                current_datetime = datetime.now()
-                upcoming_session = False
-                
-                print(race_week_datetimes)
-                
-                for session, date, weekday, time in race_week_datetimes:
-                    session_datetime = datetime.strptime(f"{date} {time} {current_datetime.year}", "%d %b %H:%M %Y")
-                    print(f"{session}: {date} {time}")
-                    embed.add_field(name="", value=f"{check_session_status(current_datetime, session_datetime)} **{session}**", inline=True)
-                    embed.add_field(name="", value=f":calendar_spiral: {weekday}", inline=True)
-                    embed.add_field(name="", value=f":alarm_clock: **{time}**", inline=True)
+        dates = [date.text for date in dates]
+        
+        datesPL = convert_date_to_polish_months(dates)
+        week_start = datesPL[0]
+        week_end = datesPL[-1]
+        
+        weekdays = convert_date_to_weekday(dates)
+        date_times = [time.text for time in date_times]
+        date_times = convert_to_Warsaw_time(date_times)
+        
+        race_week_datetimes = list(zip(sessions_name, dates, weekdays, date_times))
+        
+        embed = discord.Embed(title=f"{get_flag_emoji(race_id)} {race_name} {get_flag_emoji(race_id)} ‏ ‎ ‎ ‎ :calendar:{week_start} - {week_end} ", color=0xEF1A2D)
+        thumbnail = "https://cdn.discordapp.com/emojis/734895858725683314.webp?size=96&quality=lossless"
+        embed.add_field(name="", value="", inline=False)
+        embed.set_thumbnail(url=thumbnail)
+        
+        current_datetime = datetime.now()
+        upcoming_session = False
+        print(race_week_datetimes)
+        
+        for session, date, weekday, time in race_week_datetimes:
+            session_datetime = datetime.strptime(f"{date} {time} {current_datetime.year}", "%d %b %H:%M %Y")
+            print(f"{session}: {date} {time}")
+            embed.add_field(name="", value=f"{check_session_status(current_datetime, session_datetime)} **{session}**", inline=True)
+            embed.add_field(name="", value=f":calendar_spiral: {weekday}", inline=True)
+            embed.add_field(name="", value=f":alarm_clock: **{time}**", inline=True)
+            
+            if not upcoming_session:
+                time_left, upcoming_session = next_session_starts_in(current_datetime, session_datetime)
+                embed.add_field(name="", value=f":clock1: Pozostało {time_left}", inline=False)
                     
-                    if not upcoming_session:
-                        time_left, upcoming_session = next_session_starts_in(current_datetime, session_datetime)
-                        embed.add_field(name="", value=f":clock1: Pozostało {time_left}", inline=False)
-                         
-                    embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
+            embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
             
         await ctx.send(embed=embed)
         await client.tree.sync()
@@ -225,7 +290,10 @@ def run_discord_bot():
     @client.hybrid_command(name="results", description="Last session results")
     async def results(ctx):
         embed = discord.Embed(title=f"Wyniki ostatiej sesji", color=0xEF1A2D)
-        await ctx.send(embed=embed)
+        view = View()
+        button = Button(label='Wyniki sesji', emoji='🏁', url=f'https://www.formula1.com/en/results.html/2024/races/{current_race_results_url_id()}/race-result.html')
+        view.add_item(button)
+        await ctx.send(embed=embed, view=view)
         await client.tree.sync()
     
     @client.hybrid_command(name="standings", description="Current driver/constructor standings")
@@ -254,7 +322,7 @@ def run_discord_bot():
         
         async def button_teams_callback(interacion):
             team_standings_url = "https://www.formula1.com/en/results.html/2024/team.html"
-            embed = discord.Embed(title=f"Klasyfikacja generalna kierowców", color=0x000000)
+            embed = discord.Embed(title=f"Klasyfikacja generalna konstruktorów", color=0x000000)
             response = requests.get(team_standings_url)
             soup = BeautifulSoup(response.content, 'html.parser')
             team_standings_url = soup.find("tbody")
