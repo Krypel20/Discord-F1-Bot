@@ -7,6 +7,9 @@ def handle_response(message) ->str:
     if p_message == 'f1' or p_message == 'results' or p_message == 'standings':
         return 'Użyj ukośnika przed komendą tumanie. O w ten sposób -> /f1'
     
+    if p_message == 'info':
+        return '/f1'
+    
     if p_message.startswith('jebany bot'):
         return 'Morda cwelu okok'
     

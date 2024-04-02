@@ -9,7 +9,7 @@ load_dotenv()
 
 #custom imports
 TOKEN = os.getenv('TOKEN')
-announcements_channel_id = 1104824672098451487
+announcements_channel_id = 1224669338255233044
 from async_commands import send_message
 
 
@@ -184,7 +184,7 @@ def remaining_time_to_next_session(current_datetime):
         
         print(f"{session} remaining time:", time_difference.total_seconds())
         
-        if 0 < time_difference.total_seconds() <= (3600*64):
+        if 0 < time_difference.total_seconds() <= 900: #check if remaining time to session is 15 minutes or less
             print(f'{session} odbedzie sie w ciągu {time_difference}')
             return time_difference.total_seconds() , session
     
@@ -208,7 +208,7 @@ def run_discord_bot():
             current_datetime = datetime.now()
             
             if 0 < remaining_time and last_session_name != session_name:
-                await channel.send(f":checkered_flag: **{session_name}** ZACZNIE SIĘ W CIAGU **{int(remaining_time/3600)} GODZINY**:checkered_flag:")
+                await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{int(remaining_time/60)} minut**:checkered_flag:")
                 print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time}")
                 last_session_name = session_name
                 cooldown = 10800
