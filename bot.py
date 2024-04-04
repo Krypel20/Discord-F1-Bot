@@ -248,7 +248,6 @@ class RaceWeek:
             try:
                 embed = discord.Embed(title=f"{self.check_session_status()} {race_week.name} - {self.session_name} {race_week.flag_emoji}", color=0xEF1A2D)
                 thumbnail = "https://cdn.betterttv.net/emote/611fc2b976ea4e2b9f78518f/3x.gif"
-                embed.add_field(name="", value="", inline=False)
                 embed.set_thumbnail(url=thumbnail)
                 time_left = self.session_starts_in(current_datetime)
                             
@@ -340,7 +339,7 @@ def run_discord_bot():
     async def f1(ctx):
         global race_week, race_html
         
-        embed = discord.Embed(title=f"{race.flag_emoji} {race.name} {race.flag_emoji} ‏ ‎ ‎ ‎ :calendar:{race.week_start} - {race.week_end} ", color=0xEF1A2D)
+        embed = discord.Embed(title=f"{race_week.flag_emoji} {race_week.name} {race_week.flag_emoji} ‏ ‎ ‎ ‎ :calendar:{race_week.week_start} - {race_week.week_end} ", color=0xEF1A2D)
         thumbnail = "https://cdn.discordapp.com/emojis/734895858725683314.webp?size=96&quality=lossless"
         embed.add_field(name="", value="", inline=False)
         embed.set_thumbnail(url=thumbnail)
