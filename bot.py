@@ -11,7 +11,7 @@ load_dotenv()
 TOKEN = os.getenv('TOKEN')
 announcements_channel_id = 1224669338255233044
 from async_commands import send_message
-
+current_datetime = datetime.now()
 
 polish_to_english_month = {
     'Sty': 'Jan', 'Lut': 'Feb', 'Mar': 'Mar', 'Kwi': 'Apr',
@@ -85,7 +85,7 @@ def current_race_html():
         if race_status:   
             return race
 
-def current_race_results_url_id(race):
+def race_results_url_id(race):
     race_id = race.get('id')
     get_current_race_url = lambda race_id: race_place_html_adress.get(race_id, ":question:")
     return get_current_race_url(race_id)
@@ -140,83 +140,12 @@ def convert_date_to_polish_months(date_strings):
                 break
     return polish_dates
             
-def check_session_status(current_datetime, session_datetime):
-
-    session_duration = timedelta(hours=1, minutes=30)
-    
-    if session_datetime < current_datetime:
-        if current_datetime - session_datetime >= session_duration:
-            return "⚫"
-        else:
-            return "🟢"
-    elif session_datetime > current_datetime:
-        return "🔴"
-    else:
-        return "🟢"
-
-def session_starts_in(current_datetime, session_datetime):
-    
-    if check_session_status(current_datetime, session_datetime) == "🔴":
-        time_left = session_datetime - current_datetime
-        days = time_left.days
-        hours, remainder = divmod(time_left.seconds, 3600)
-        minutes, _ = divmod(remainder, 60)
-        if days > 0:
-            time_left = f"**{days}d {hours}h {minutes}m**"
-        elif hours > 0:
-            time_left = f"**{hours}h {minutes}m**"
-        else:
-            time_left = f"**{minutes} minut**"
-        upcoming_session = True
-    elif check_session_status(current_datetime, session_datetime) == "🟢":
-        time_left = '**🟢AKTUALNIE TRWA🟢**'
-        upcoming_session = True
-    else: 
-        time_left = "**⚫KONIEC⚫**" 
-        upcoming_session = False
-        
-    return time_left, upcoming_session
-
-def race_week_date_times(race):
-    dates = race.find_all('td', class_="text-right md:text-left")
-    date_times = race.find_all('div', class_="text-right md:text-left pr-2 md:pr-0", string=True)
-    race_name = race.find("span", class_='').text.upper()
-    sessions_name = ["FP1 " + race_name, "FP2 " + race_name, "FP3 " + race_name, "QUALI " + race_name, "WYŚCIG " + race_name]
-
-    dates = [date.text for date in dates]
-    date_times = [time.text for time in date_times]
-    date_times = convert_to_Warsaw_time(date_times)
-    
-    return list(zip(sessions_name, dates, date_times))
-
-def remaining_time_to_next_session(current_datetime, race):
-    race_week_datetimes = race_week_date_times(race)
-    
-    for session, date, time in race_week_datetimes:
-        session_datetime = datetime.strptime(f"{date} {time} {current_datetime.year}", "%d %b %H:%M %Y")
-        time_difference = session_datetime - current_datetime
-        
-        print(f"{session} remaining time:", time_difference.total_seconds())
-        
-        if 0 < time_difference.total_seconds() <= 900: #check if remaining time to session is 15 minutes or less
-            print(f'{session} odbedzie sie w ciągu {time_difference}')
-            return time_difference.total_seconds() , session
-    
-    return 0, ''
-
-def return_current_race_name(race):
-    race_id = race.get('id')
-    flag_emoji = lambda race_id: flags_emojis.get(race_id, ":question:")
-    race_name = race.find("span", class_='').text
-    
-    return race_id, race_name, flag_emoji
-
 class RaceWeek:
 
     def __init__(self, race_html):
-        self.race_id = race_html.get('id')
-        self.flag_emoji = flags_emojis.get(self.race_id, ":question:")
-        self.race_name = race_html.find("span", class_='').text
+        self.id = race_html.get('id')
+        self.flag_emoji = flags_emojis.get(self.id, ":question:")
+        self.name = race_html.find("span", class_='').text
         dates = race_html.find_all('td', class_="text-right md:text-left")
         date_times = race_html.find_all('div', class_="text-right md:text-left pr-2 md:pr-0", string=True)
         sessions_name = ["FP1", "FP2", "FP3", "Kwalifikacje", "Wyścig"]
@@ -228,11 +157,15 @@ class RaceWeek:
         date_times = convert_to_Warsaw_time(date_times)
         self.race_week_datetimes = list(zip(sessions_name, dates, date_times))
         self.session = {}
+        self.sessions = []
+        
+        # List of sessions as Session objects and single session model to inicialize each session (done below)
         for session_name, date, date_time in self.race_week_datetimes:
             session_obj = self.Session(session_name, date, date_time)
+            self.sessions.append(session_obj)
             self.session[session_name] = session_obj
 
-        # Session object inicialization (FP1, FP2, FP3, Quali, Race)
+        # Session object inicialization for each session (FP1, FP2, FP3, Quali, Race)
         for session_name, date, date_time in self.race_week_datetimes:
             if session_name == "FP1":
                 self.FP1 = self.session[session_name]
@@ -244,87 +177,92 @@ class RaceWeek:
                 self.Quali = self.session[session_name]
             elif session_name == "Wyścig":
                 self.Race = self.session[session_name]
-
-    def remaining_time_to_next_session(self, current_datetime):
+    
+    def next_session(self, current_datetime=datetime.now()):
         
-        for session, date, time in self.race_week_datetimes:
-            session_datetime = datetime.strptime(f"{date} {time} {current_datetime.year}", "%d %b %H:%M %Y")
-            time_difference = session_datetime - current_datetime
+        for session in self.sessions:
+            time_difference = session.datetime - current_datetime
             
-            # print(f"{session} remaining time:", time_difference.total_seconds())
-            
-            if 0 < time_difference.total_seconds(): #check if remaining time to session is 15 minutes or less
-                return time_difference.total_seconds()
+            if 0 < time_difference.total_seconds():
+                return session
+    
+    def current_session(self, current_datetime=datetime.now()):
         
+        for session in self.sessions:
+            time_difference = session.datetime - current_datetime
+            if -4500 < time_difference.total_seconds() <= 0:
+                return session
+        return None
         
     class Session:
-        def __init__(self, session_name, date, date_time):
+        def __init__(self, session_name, date, time):
             self.weekday = convert_date_to_weekday(date)
             self.session_name = session_name
             self.date = date
-            self.date_time = date_time
+            self.time = time
+            self.datetime = datetime.strptime(f"{self.date} {self.time} {current_datetime.year}", "%d %b %H:%M %Y")
         
-        def check_session_status(current_datetime, session_datetime):
-            session_duration = timedelta(hours=1, minutes=30)
+        def check_session_status(self, current_datetime=datetime.now()):
+            if self.session_name in ["FP1", "FP2", "FP3"]: 
+                session_duration = timedelta(hours=1, minutes=5)
+            elif self.session_name == 'Kwalifikacje':
+                session_duration = timedelta(hours=0, minutes=55)
+            elif self.session_name == 'Wyścig':
+                session_duration = timedelta(hours=1, minutes=45)
             
-            if session_datetime < current_datetime:
-                if current_datetime - session_datetime >= session_duration:
+            if self.datetime < current_datetime:
+                if current_datetime - self.datetime >= session_duration:
                     return "⚫"
                 else:
                     return "🟢"
-            elif session_datetime > current_datetime:
+            elif self.datetime > current_datetime:
                 return "🔴"
             else:
                 return "🟢"
             
-        def session_starts_in(self, current_datetime):
-    
-            if check_session_status(current_datetime, self.date_time) == "🔴":
-                time_left = self.date_time - current_datetime
+        def session_starts_in(self, current_datetime=datetime.now()):
+            
+            if self.check_session_status(current_datetime) == "🔴":
+                time_left = self.datetime - current_datetime
                 days = time_left.days
                 hours, remainder = divmod(time_left.seconds, 3600)
                 minutes, _ = divmod(remainder, 60)
                 if days > 0:
-                    time_left = f"**{days}d {hours}h {minutes}m**"
+                    time_left = f":clock1: Pozostało **{days}d {hours}h {minutes}m**"
                 elif hours > 0:
-                    time_left = f"**{hours}h {minutes}m**"
+                    time_left = f":clock1: Pozostało **{hours}h {minutes}m**"
                 else:
-                    time_left = f"**{minutes} minut**"
-                upcoming_session = True
-            elif check_session_status(current_datetime, self.date_time) == "🟢":
+                    time_left = f":clock1: Pozostało **{minutes} minut**"
+            elif self.check_session_status(current_datetime) == "🟢":
                 time_left = '**🟢AKTUALNIE TRWA🟢**'
-                upcoming_session = True
             else: 
-                time_left = "**⚫KONIEC⚫**" 
-                upcoming_session = False
+                time_left = "**⚫ZAKOŃCZONE⚫**" 
                 
-            return time_left, upcoming_session
+            return time_left
+        
+        def time_left(self, current_datetime=datetime.now()):
+            time_difference = self.datetime - current_datetime
+            return time_difference.total_seconds()
+        
+        def get_session_embed(self, race_week):
+            try:
+                embed = discord.Embed(title=f"{self.check_session_status()} {race_week.name} - {self.session_name} {race_week.flag_emoji}", color=0xEF1A2D)
+                thumbnail = "https://cdn.betterttv.net/emote/611fc2b976ea4e2b9f78518f/3x.gif"
+                embed.add_field(name="", value="", inline=False)
+                embed.set_thumbnail(url=thumbnail)
+                time_left = self.session_starts_in(current_datetime)
+                            
+                embed.add_field(name="", value=f":calendar_spiral: {self.weekday}", inline=True)
+                embed.add_field(name="", value=f":alarm_clock: **{self.time}**", inline=True)
+                embed.add_field(name="", value=f"{time_left}", inline=False)
+                return embed
+            
+            except Exception as e:
+                print("Wystąpił wyjątek:", e)
+                return None
 
-race_html = current_race_html()
-
-# Tworzymy obiekt klasy RaceWeek
-race_week = RaceWeek(race_html)
-current_datetime = datetime.now()
-
-# Wywołanie atrybutów klasy RaceWeek
-print("Race ID:", race_week.race_id)
-print("Flag Emoji:", race_week.flag_emoji)  # Przykład, przekazujemy identyfikator wyścigu
-print("Race Name:", race_week.race_name)
-print("Week Start:", race_week.week_start)
-print("Week End:", race_week.week_end)
-print("Sessions Info:", race_week.race_week_datetimes)
-print("Remaining time to next session:", race_week.remaining_time_to_next_session(current_datetime))
-
-# Wywołanie atrybutów klasy Session dla konkretnego obiektu Session w RaceWeek
-# Zakładając, że chcemy uzyskać atrybuty sesji FP1
-print("\nSession Name:", race_week.FP1.session_name)
-print("Date:", race_week.FP1.date)
-print("Date Time:", race_week.FP1.date_time)
-print("Weekday:", race_week.FP1.weekday)
-print("\nSession Name:", race_week.Quali.session_name)
-print("Date:", race_week.Quali.date)
-print("Date Time:", race_week.Quali.date_time)
-print("Weekday:", race_week.Quali.weekday)
+race_html = current_race_html() #get current race week data from calendar
+race_week = RaceWeek(race_html) 
 
 def run_discord_bot():
     intents = discord.Intents.default() # or discord.Intents.all()
@@ -333,26 +271,54 @@ def run_discord_bot():
     
     async def background_task():
         channel = client.get_channel(announcements_channel_id)
-        last_session_name = ''
         cooldown = 15
         print(f"rozpoczęcie background task")
         
-        while True:
-            current_datetime = datetime.now()
-            print(f"rozpoczęcie pętli, cooldown: {cooldown}")
-            race = current_race_html()
-            remaining_time, session_name = remaining_time_to_next_session(current_datetime, race)
+        while True: 
+            print(f'__________Backgound Task Start__________')
+            global race_html, race_week
             
-            if 0 < remaining_time and last_session_name != session_name:
-                await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{int(remaining_time/60)} minut**:checkered_flag:")
-                print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time}")
-                last_session_name = session_name
-                cooldown = 10800
-                await asyncio.sleep(cooldown)
-            else:
-                cooldown = 15
-                await asyncio.sleep(cooldown)
-
+            race_html = current_race_html() # update race week data from calendar
+            race_week = RaceWeek(race_html) # create RaceWeek object from newly gathered data
+            
+            next_session = race_week.next_session()
+            remaining_time = int(next_session.time_left()/60) # in minutes
+            session_name = next_session.session_name
+            
+            print(f'Next session: {next_session.session_name} starts in {int(remaining_time)} minutes')
+            
+            if session_name in ["FP1", "FP2", "FP3"]:
+                if 0 < remaining_time <= 15:
+                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time} minut**:checkered_flag:")
+                    print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time} MINUT")
+                    cooldown = 900
+                    await asyncio.sleep(cooldown)
+                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** SIĘ ROZPOCZEŁO :checkered_flag:")
+                    embed = next_session.get_session_embed(race_week)
+                    await channel.send(embed=embed)
+                    cooldown = 10800
+                else:
+                    cooldown = 15
+                    
+            if session_name in ["Kwalifikacje", "Wyścig"]:
+                if 5 < remaining_time <= 30: 
+                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time} minut**:checkered_flag:")
+                    print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time} MINUT")
+                    cooldown = 1600
+                elif 0 < remaining_time <= 5: 
+                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** ZARAZ SIĘ ZACZNIE pozostało **{remaining_time} minut**:checkered_flag:")
+                    print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time} MINUT")
+                    cooldown = 293
+                    await asyncio.sleep(cooldown)
+                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** SIĘ ROZPOCZEŁO :checkered_flag:")
+                    embed = next_session.get_session_embed()
+                    await channel.send(embed=embed)
+                    cooldown = 28800
+                else:
+                    cooldown = 15
+            print(f'________Cooldown for {cooldown} seconds________')
+            await asyncio.sleep(cooldown)
+            
     @client.event
     async def on_ready():
         await client.tree.sync()
@@ -372,48 +338,28 @@ def run_discord_bot():
     @client.hybrid_command(name="f1", description="Info about current race week")
     @commands.cooldown(1, COOLDOWN_SECONDS, commands.BucketType.default)
     async def f1(ctx):
-        race = current_race_html()
-        race_id = race.get('id')
-        get_flag_emoji = lambda race_id: flags_emojis.get(race_id, ":question:")
-        race_name = race.find("span", class_='').text
+        global race_week, race_html
         
-        dates = race.find_all('td', class_="text-right md:text-left")
-        date_times = race.find_all('div', class_="text-right md:text-left pr-2 md:pr-0", string=True)
-        
-        sessions_name = ["FP1", "FP2", "FP3", "Kwalifikacje", "Wyścig"]
-
-        dates = [date.text for date in dates]
-        
-        datesPL = convert_date_to_polish_months(dates)
-        week_start = datesPL[0]
-        week_end = datesPL[-1]
-        
-        weekdays = convert_dates_to_weekdays(dates)
-        date_times = [time.text for time in date_times]
-        date_times = convert_to_Warsaw_time(date_times)
-        
-        race_week_datetimes = list(zip(sessions_name, dates, weekdays, date_times))
-        
-        embed = discord.Embed(title=f"{get_flag_emoji(race_id)} {race_name} {get_flag_emoji(race_id)} ‏ ‎ ‎ ‎ :calendar:{week_start} - {week_end} ", color=0xEF1A2D)
+        embed = discord.Embed(title=f"{race.flag_emoji} {race.name} {race.flag_emoji} ‏ ‎ ‎ ‎ :calendar:{race.week_start} - {race.week_end} ", color=0xEF1A2D)
         thumbnail = "https://cdn.discordapp.com/emojis/734895858725683314.webp?size=96&quality=lossless"
         embed.add_field(name="", value="", inline=False)
         embed.set_thumbnail(url=thumbnail)
-        
         current_datetime = datetime.now()
-        upcoming_session = False
-        print(race_week_datetimes)
+        next_session = race_week.next_session()
+        current_session = race_week.current_session()
         
-        for session, date, weekday, time in race_week_datetimes:
-            session_datetime = datetime.strptime(f"{date} {time} {current_datetime.year}", "%d %b %H:%M %Y")
-            print(f"{session}: {date} {time}")
-            embed.add_field(name="", value=f"{check_session_status(current_datetime, session_datetime)} **{session}**", inline=True)
-            embed.add_field(name="", value=f":calendar_spiral: {weekday}", inline=True)
-            embed.add_field(name="", value=f":alarm_clock: **{time}**", inline=True)
+        for session in race_week.sessions:
+            embed.add_field(name="", value=f"{session.check_session_status(current_datetime)} **{session.session_name}**", inline=True)
+            embed.add_field(name="", value=f":calendar_spiral: {session.weekday}", inline=True)
+            embed.add_field(name="", value=f":alarm_clock: **{session.time}**", inline=True)
             
-            if not upcoming_session:
-                time_left, upcoming_session = session_starts_in(current_datetime, session_datetime)
-                embed.add_field(name="", value=f":clock1: Pozostało {time_left}", inline=False)
-                    
+            if session.session_name == next_session.session_name:
+                time_left = session.session_starts_in(current_datetime)
+                embed.add_field(name="", value=f"{time_left}", inline=False)
+            elif current_session is not None and session.session_name == current_session.session_name:
+                time_left = session.session_starts_in(current_datetime)
+                embed.add_field(name="", value=f"{time_left}", inline=False)
+            
             embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
             
         await ctx.send(embed=embed)
@@ -428,7 +374,7 @@ def run_discord_bot():
     async def results(ctx):
         embed = discord.Embed(title=f"Wyniki weekendu wyścigowego", color=0xEF1A2D)
         view = View()
-        button = Button(label='Wyniki sesji', emoji='🏁', url=f'https://www.formula1.com/en/results.html/2024/races/{current_race_results_url_id(current_race_html())}/race-result.html')
+        button = Button(label='Wyniki sesji', emoji='🏁', url=f'https://www.formula1.com/en/results.html/2024/races/{race_results_url_id(current_race_html())}/race-result.html')
         view.add_item(button)
         await ctx.send(embed=embed, view=view)
         await client.tree.sync()
