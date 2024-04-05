@@ -1,4 +1,4 @@
-import discord, requests, asyncio, os
+import discord, requests, asyncio, os, calendar
 from discord import Interaction
 from discord.ext import commands, tasks
 from discord.ui import Button, View
@@ -11,9 +11,8 @@ load_dotenv()
 TOKEN = os.getenv('TOKEN')
 announcements_channel_id = 1224669338255233044
 from async_commands import send_message
-current_datetime = datetime.now()
 
-polish_to_english_month = {
+english_to_polish_months = {
     'Sty': 'Jan', 'Lut': 'Feb', 'Mar': 'Mar', 'Kwi': 'Apr',
     'Maj': 'May', 'Cze': 'Jun', 'Lip': 'Jul', 'Sie': 'Aug',
     'Wrz': 'Sep', 'Paź': 'Oct', 'Lis': 'Nov', 'Gru': 'Dec'
@@ -73,7 +72,7 @@ race_place_html_adress = {
     "abu-dhabi-grand-prix": "1252/abu-dhabi"
 }
 
-def current_race_html():
+def current_race_week_html_data():
     calendar_url = "https://f1calendar.com/pl"
     response = requests.get(calendar_url)
     soup = BeautifulSoup(response.content, 'html.parser')
@@ -105,7 +104,7 @@ def convert_dates_to_weekdays(date_strings):
     converted_dates = []
     
     for date_string in date_strings:
-        for polish_month, english_month in polish_to_english_month.items():
+        for polish_month, english_month in english_to_polish_months.items():
             if polish_month in date_string:
                 date_string = date_string.replace(polish_month, english_month)
                 break
@@ -119,7 +118,7 @@ def convert_dates_to_weekdays(date_strings):
     return converted_dates
 
 def convert_date_to_weekday(date_string):
-    for polish_month, english_month in polish_to_english_month.items():
+    for polish_month, english_month in english_to_polish_months.items():
         if polish_month is date_string:
             date_string = date_string.replace(polish_month, english_month)
             break
@@ -130,10 +129,10 @@ def convert_date_to_weekday(date_string):
     weekday_name = weekdays[weekday_num]
     return weekday_name
 
-def convert_date_to_polish_months(date_strings):
+def convert_date_to_polish_months(dates):
     polish_dates = []
-    for date_string in date_strings:
-        for polish_month, english_month in polish_to_english_month.items():
+    for date_string in dates:
+        for polish_month, english_month in english_to_polish_months.items():
             if english_month in date_string:
                 day = date_string.split()[0]
                 polish_dates.append(f"{day} {polish_month}")
@@ -197,6 +196,7 @@ class RaceWeek:
         
     class Session:
         def __init__(self, session_name, date, time):
+            current_datetime = datetime.now()
             self.weekday = convert_date_to_weekday(date)
             self.session_name = session_name
             self.date = date
@@ -261,7 +261,7 @@ class RaceWeek:
                 print("Wystąpił wyjątek:", e)
                 return None
 
-race_html = current_race_html() #get current race week data from calendar
+race_html = current_race_week_html_data() #get current race week data from calendar
 race_week = RaceWeek(race_html) 
 
 def run_discord_bot():
@@ -282,7 +282,7 @@ def run_discord_bot():
         while True: 
             print(f'__________Backgound Task Start__________')
 
-            race_html = current_race_html() # update race week data from calendar
+            race_html = current_race_week_html_data() # update race week data from calendar
             race_week = RaceWeek(race_html) # create RaceWeek object from newly gathered data
             current_datetime = datetime.now()
 
@@ -386,7 +386,7 @@ def run_discord_bot():
     async def results(ctx):
         embed = discord.Embed(title=f"Wyniki weekendu wyścigowego", color=0xEF1A2D)
         view = View()
-        button = Button(label='Wyniki sesji', emoji='🏁', url=f'https://www.formula1.com/en/results.html/2024/races/{race_results_url_id(current_race_html())}/race-result.html')
+        button = Button(label='Wyniki sesji', emoji='🏁', url=f'https://www.formula1.com/en/results.html/2024/races/{race_results_url_id(current_race_week_html_data())}/race-result.html')
         view.add_item(button)
         await ctx.send(embed=embed, view=view)
         await client.tree.sync()
