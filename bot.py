@@ -180,6 +180,7 @@ class RaceWeek:
     
     def next_session(self, current_datetime=datetime.now()):
         
+        print(f'current date time: {current_datetime}')
         for session in self.sessions:
             time_difference = session.datetime - current_datetime
             
@@ -211,7 +212,7 @@ class RaceWeek:
                 session_duration = timedelta(hours=1, minutes=45)
             
             if self.datetime < current_datetime:
-                if current_datetime - self.datetime >= session_duration:
+                if current_datetime - self.datetime > session_duration:
                     return "⚫"
                 else:
                     return "🟢"
@@ -234,14 +235,15 @@ class RaceWeek:
                 else:
                     time_left = f":clock1: Pozostało **{minutes} minut**"
             elif self.check_session_status(current_datetime) == "🟢":
-                time_left = '**🟢AKTUALNIE TRWA🟢**'
+                time_left = '**LIVE🟢**'
             else: 
-                time_left = "**⚫ZAKOŃCZONE⚫**" 
+                time_left = "**ZAKOŃCZONE⚫**" 
                 
             return time_left
         
         def time_left(self, current_datetime=datetime.now()):
             time_difference = self.datetime - current_datetime
+            print(f"time left: {time_difference}")
             return time_difference.total_seconds()
         
         def get_session_embed(self, race_week):
@@ -279,18 +281,20 @@ def run_discord_bot():
             
             race_html = current_race_html() # update race week data from calendar
             race_week = RaceWeek(race_html) # create RaceWeek object from newly gathered data
-            
-            next_session = race_week.next_session()
-            remaining_time = int(next_session.time_left()/60) # in minutes
+            current_datetime = datetime.now()
+
+            next_session = race_week.next_session(current_datetime)
+            remaining_time = round(next_session.time_left(current_datetime)/60) # in minutes
             session_name = next_session.session_name
             
-            print(f'Next session: {next_session.session_name} starts in {int(remaining_time)} minutes')
+            print(f'Next session: {next_session.session_name} starts in {remaining_time} minutes')
             
             if session_name in ["FP1", "FP2", "FP3"]:
                 if 0 < remaining_time <= 15:
                     await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time} minut**:checkered_flag:")
                     print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time} MINUT")
-                    cooldown = 900
+                    cooldown = int(remaining_time/60)
+                    print(f'________Inner loop cooldown for {cooldown} seconds________')
                     await asyncio.sleep(cooldown)
                     await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** SIĘ ROZPOCZEŁO :checkered_flag:")
                     embed = next_session.get_session_embed(race_week)
@@ -302,12 +306,13 @@ def run_discord_bot():
             if session_name in ["Kwalifikacje", "Wyścig"]:
                 if 5 < remaining_time <= 30: 
                     await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time} minut**:checkered_flag:")
-                    print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time} MINUT")
-                    cooldown = 1600
+                    cooldown = int(remaining_time/60)-1000
+                    embed = next_session.get_session_embed()
+                    await channel.send(embed=embed)
                 elif 0 < remaining_time <= 5: 
                     await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** ZARAZ SIĘ ZACZNIE pozostało **{remaining_time} minut**:checkered_flag:")
-                    print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time} MINUT")
-                    cooldown = 293
+                    cooldown = round(remaining_time/60)
+                    print(f'________Inner loop cooldown for {cooldown} seconds________')
                     await asyncio.sleep(cooldown)
                     await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** SIĘ ROZPOCZEŁO :checkered_flag:")
                     embed = next_session.get_session_embed()
@@ -346,24 +351,27 @@ def run_discord_bot():
         current_datetime = datetime.now()
         next_session = race_week.next_session()
         current_session = race_week.current_session()
-        
-        for session in race_week.sessions:
-            embed.add_field(name="", value=f"{session.check_session_status(current_datetime)} **{session.session_name}**", inline=True)
-            embed.add_field(name="", value=f":calendar_spiral: {session.weekday}", inline=True)
-            embed.add_field(name="", value=f":alarm_clock: **{session.time}**", inline=True)
-            
-            if session.session_name == next_session.session_name:
-                time_left = session.session_starts_in(current_datetime)
-                embed.add_field(name="", value=f"{time_left}", inline=False)
-            elif current_session is not None and session.session_name == current_session.session_name:
-                time_left = session.session_starts_in(current_datetime)
-                embed.add_field(name="", value=f"{time_left}", inline=False)
-            
-            embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
-            
-        await ctx.send(embed=embed)
-        await client.tree.sync()
-    
+        try: 
+            for session in race_week.sessions:
+                embed.add_field(name="", value=f"{session.check_session_status(current_datetime)} **{session.session_name}**", inline=True)
+                embed.add_field(name="", value=f":calendar_spiral: {session.weekday}", inline=True)
+                embed.add_field(name="", value=f":alarm_clock: **{session.time}**", inline=True)
+                
+                if session.session_name == next_session.session_name:
+                    time_left = session.session_starts_in(current_datetime)
+                    embed.add_field(name="", value=f"{time_left}", inline=False)
+                elif current_session is not None and session.session_name == current_session.session_name:
+                    time_left = session.session_starts_in(current_datetime)
+                    embed.add_field(name="", value=f"{time_left}", inline=False)
+                
+                embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
+                
+            await ctx.send(embed=embed)
+            await client.tree.sync()
+
+        except Exception as e:
+            print('Exepction', e)
+
     @f1.error
     async def f1_error(ctx, error):
         if isinstance(error, commands.CommandOnCooldown):

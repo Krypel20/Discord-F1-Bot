@@ -16,7 +16,7 @@ def handle_response(message) ->str:
     if p_message.startswith('??'):
         return 'Brawokolego znak zapytania napiszę bo jestem taki głupi'
     
-    if p_message.startswith('jebany bot') or p_message.startswith('morda cwelu') or p_message.startswith('<@1218957474552483933> morda cwelu'):
+    if p_message.startswith('jebany bot') or p_message.startswith('<@1218957474552483933> morda cwelu'):
         return 'Morda cwelu okok'
     
     if p_message.startswith('<@1218957474552483933>') or p_message.startswith('<@&1224670972561330177>'):
