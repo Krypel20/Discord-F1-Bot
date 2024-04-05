@@ -243,7 +243,6 @@ class RaceWeek:
         
         def time_left(self, current_datetime=datetime.now()):
             time_difference = self.datetime - current_datetime
-            print(f"time left: {time_difference}")
             return time_difference.total_seconds()
         
         def get_session_embed(self, race_week):
@@ -271,58 +270,64 @@ def run_discord_bot():
     client = commands.Bot(command_prefix='!', intents = intents)
     
     async def background_task():
+        global race_html, race_week
         channel = client.get_channel(announcements_channel_id)
-        cooldown = 15
-        print(f"rozpoczęcie background task")
-        
+        current_datetime = datetime.now()
+        next_session = race_week.next_session(current_datetime)
+        remaining_time = next_session.time_left(current_datetime) # in seconds
+        cooldown = remaining_time % 60
+        print(f'________First cooldown {cooldown} seconds to even time________')
+        await asyncio.sleep(cooldown)
+
         while True: 
             print(f'__________Backgound Task Start__________')
-            global race_html, race_week
-            
+
             race_html = current_race_html() # update race week data from calendar
             race_week = RaceWeek(race_html) # create RaceWeek object from newly gathered data
             current_datetime = datetime.now()
 
             next_session = race_week.next_session(current_datetime)
-            remaining_time = round(next_session.time_left(current_datetime)/60) # in minutes
+            remaining_time = round(next_session.time_left(current_datetime)) # in seconds
             session_name = next_session.session_name
             
-            print(f'Next session: {next_session.session_name} starts in {remaining_time} minutes')
+            print(f'Next session: {next_session.session_name} starts in {remaining_time} seconds')
             
             if session_name in ["FP1", "FP2", "FP3"]:
-                if 0 < remaining_time <= 15:
-                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time} minut**:checkered_flag:")
-                    print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time} MINUT")
-                    cooldown = int(remaining_time/60)
-                    print(f'________Inner loop cooldown for {cooldown} seconds________')
-                    await asyncio.sleep(cooldown)
-                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** SIĘ ROZPOCZEŁO :checkered_flag:")
-                    embed = next_session.get_session_embed(race_week)
-                    await channel.send(embed=embed)
-                    cooldown = 10800
+                if 0 < remaining_time <= 15*60:
+                    #await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time/60} minut**:checkered_flag:")
+                    print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time/60} MINUT")
+                    asyncio.create_task(annouce_session_start(next_session,channel))
+                    cooldown = round(remaining_time)+300
                 else:
-                    cooldown = 15
+                    cooldown = remaining_time % 60
                     
             if session_name in ["Kwalifikacje", "Wyścig"]:
-                if 5 < remaining_time <= 30: 
-                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time} minut**:checkered_flag:")
-                    cooldown = int(remaining_time/60)-1000
-                    embed = next_session.get_session_embed()
-                    await channel.send(embed=embed)
-                elif 0 < remaining_time <= 5: 
-                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** ZARAZ SIĘ ZACZNIE pozostało **{remaining_time} minut**:checkered_flag:")
-                    cooldown = round(remaining_time/60)
-                    print(f'________Inner loop cooldown for {cooldown} seconds________')
-                    await asyncio.sleep(cooldown)
-                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** SIĘ ROZPOCZEŁO :checkered_flag:")
-                    embed = next_session.get_session_embed()
-                    await channel.send(embed=embed)
-                    cooldown = 28800
+                if 0 < remaining_time <= 30*60: 
+                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time/60} minut**:checkered_flag:")
+                    print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time/60} MINUT")
+                    asyncio.create_task(annouce_session_start(next_session,channel))
+                    cooldown = int(remaining_time)+3600
                 else:
-                    cooldown = 15
+                    cooldown = remaining_time % 60
+
             print(f'________Cooldown for {cooldown} seconds________')
             await asyncio.sleep(cooldown)
-            
+    
+    async def annouce_session_start(session, channel):
+        while True:
+            current_datetime = datetime.now()
+            remaining_time = round(session.time_left(current_datetime)) # in seconds
+            print(f'Waiting for session start, time left: {remaining_time}')
+
+            if remaining_time <=0:
+                await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session.session_name}** SIĘ ROZPOCZEŁY :checkered_flag:")
+                print(f"{session.session_name} SIĘ ZACZEŁA")
+                embed = session.get_session_embed(race_week)
+                await channel.send(embed=embed)
+                return
+            else: 
+                await asyncio.sleep(5)
+
     @client.event
     async def on_ready():
         await client.tree.sync()
