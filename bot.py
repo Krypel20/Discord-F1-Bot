@@ -294,12 +294,14 @@ def run_discord_bot():
             
             if session_name in ["FP1", "FP2", "FP3"]:
                 if 0 < remaining_time <= 15*60:
-                    #await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time/60} minut**:checkered_flag:")
+                    await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time/60} minut**:checkered_flag:")
                     print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time/60} MINUT")
                     asyncio.create_task(annouce_session_start(next_session,channel))
                     cooldown = round(remaining_time)+300
                 else:
-                    cooldown = remaining_time % 60
+                    if remaining_time % 60 > 0:
+                        cooldown = remaining_time % 60
+                    else: cooldown = 60
                     
             if session_name in ["Kwalifikacje", "Wyścig"]:
                 if 0 < remaining_time <= 30*60: 
@@ -308,7 +310,9 @@ def run_discord_bot():
                     asyncio.create_task(annouce_session_start(next_session,channel))
                     cooldown = int(remaining_time)+3600
                 else:
-                    cooldown = remaining_time % 60
+                    if remaining_time % 60 > 0:
+                        cooldown = remaining_time % 60
+                    else: cooldown = 60
 
             print(f'________Cooldown for {cooldown} seconds________')
             await asyncio.sleep(cooldown)
