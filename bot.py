@@ -386,8 +386,9 @@ def run_discord_bot():
                     embed.add_field(name="", value=f"{time_left}", inline=False)
                 
                 embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
-                await ctx.send(embed=embed)
-                await client.tree.sync()
+                
+            await ctx.send(embed=embed)
+            await client.tree.sync()
 
         except Exception as e:
             print('Exepction', e)
