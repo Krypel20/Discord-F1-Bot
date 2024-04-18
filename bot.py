@@ -8,9 +8,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 #custom imports
+from async_commands import send_message
+
 TOKEN = os.getenv('TOKEN')
 announcements_channel_id = 1224669338255233044
-from async_commands import send_message
 
 english_to_polish_months = {
     'Sty': 'Jan', 'Lut': 'Feb', 'Mar': 'Mar', 'Kwi': 'Apr',
@@ -88,7 +89,7 @@ def current_race_week_html_data():
                     return race
                 else: pass
     else:
-        print("***nie udało się pobrać danych ze strony?!***")
+        print("***could not read website HTML file***")
 
 def race_results_url_id(race):
     race_id = race.get('id')
@@ -151,32 +152,38 @@ class RaceWeek:
         self.id = race_html.get('id')
         self.flag_emoji = flags_emojis.get(self.id, ":question:")
         self.name = race_html.find("span", class_='').text
+        session_names = [] # ["FP1", "FP2", "FP3", "Kwalifikacje", "Wyścig"]
+        sessions = race_html.find_all("td", class_='p-4')
+        
+        for session_name in sessions:
+            name = session_name.contents[-1].strip()
+            session_names.append(name)
+        
         dates = race_html.find_all('td', class_="text-right md:text-left")
         date_times = race_html.find_all('div', class_="text-right md:text-left pr-2 md:pr-0", string=True)
-        sessions_name = ["FP1", "FP2", "FP3", "Kwalifikacje", "Wyścig"]
         dates = [date.text for date in dates]
         datesPL = convert_date_to_polish_months(dates)
         self.week_start = datesPL[0]
         self.week_end = datesPL[-1]
         date_times = [time.text for time in date_times]
         date_times = convert_to_Warsaw_time(date_times)
-        self.race_week_datetimes = list(zip(sessions_name, dates, date_times))
+        self.race_week_datetimes = list(zip(session_names, dates, date_times))
         self.session = {}
         self.sessions = []
         
         # List of sessions as Session objects and single session model to inicialize each session (done below)
         for session_name, date, date_time in self.race_week_datetimes:
-            session_obj = self.Session(session_name, date, date_time)
+            session_obj = self.Session(session_name, date, date_time, self.name, self.flag_emoji)
             self.sessions.append(session_obj)
             self.session[session_name] = session_obj
 
         # Session object inicialization for each session (FP1, FP2, FP3, Quali, Race)
         for session_name, date, date_time in self.race_week_datetimes:
-            if session_name == "FP1":
+            if session_name in ["FP1"]:
                 self.FP1 = self.session[session_name]
-            elif session_name == "FP2":
+            elif session_name in ["FP2", "Sprint Qualifying"]:
                 self.FP2 = self.session[session_name]
-            elif session_name == "FP3":
+            elif session_name in ["FP3", "Sprint"]:
                 self.FP3 = self.session[session_name]
             elif session_name == "Kwalifikacje":
                 self.Quali = self.session[session_name]
@@ -201,12 +208,14 @@ class RaceWeek:
         return None
         
     class Session:
-        def __init__(self, session_name, date, time):
-            current_datetime = datetime.now()
+        def __init__(self, session_name, date, time, week_name, flag_emoji):
+            self.name = week_name
+            self.flag_emoji = flag_emoji
             self.weekday = convert_date_to_weekday(date)
             self.session_name = session_name
             self.date = date
             self.time = time
+            current_datetime = datetime.now()
             self.datetime = datetime.strptime(f"{self.date} {self.time} {current_datetime.year}", "%d %b %H:%M %Y")
         
         def check_session_status(self, current_datetime=datetime.now()):
@@ -251,10 +260,10 @@ class RaceWeek:
             time_difference = self.datetime - current_datetime
             return time_difference.total_seconds()
         
-        def get_session_embed(self, race_week):
+        def get_session_embed(self):
             try:
                 current_datetime=datetime.now()
-                embed = discord.Embed(title=f"{self.check_session_status()} {race_week.name} - {self.session_name} {race_week.flag_emoji}", color=0xEF1A2D)
+                embed = discord.Embed(title=f"{self.check_session_status()} {self.name} - {self.session_name} {self.flag_emoji}", color=0xEF1A2D)
                 thumbnail = "https://cdn.betterttv.net/emote/611fc2b976ea4e2b9f78518f/3x.gif"
                 embed.set_thumbnail(url=thumbnail)
                 time_left = self.session_starts_in(current_datetime)
@@ -262,14 +271,20 @@ class RaceWeek:
                 embed.add_field(name="", value=f":calendar_spiral: {self.weekday}", inline=True)
                 embed.add_field(name="", value=f":alarm_clock: **{self.time}**", inline=True)
                 embed.add_field(name="", value=f"{time_left}", inline=False)
+                print(f"EMBED CREATED:\n\t{self.check_session_status()} {race_week.name} - {self.session_name} {self.flag_emoji}")
+                print(f"\t:calendar_spiral: {self.weekday}")
+                print(f"\t:alarm_clock: **{self.time}**")
+                print(f"\t{time_left}")
+
                 return embed
             
             except Exception as e:
-                print("Wystąpił wyjątek:", e)
+                print("Error:", e)
                 return None
 
 race_html = current_race_week_html_data() #get current race week data from calendar
 race_week = RaceWeek(race_html) 
+
 
 def run_discord_bot():
     intents = discord.Intents.default() # or discord.Intents.all()
@@ -283,11 +298,12 @@ def run_discord_bot():
         next_session = race_week.next_session(current_datetime)
         remaining_time = next_session.time_left(current_datetime) # in seconds
         cooldown = remaining_time % 60
-        print(f'________First cooldown {cooldown} seconds to even time________')
+        print(f'__________Backgound Task Start__________')
+        print(f'First cooldown for {cooldown} seconds to even time')
         await asyncio.sleep(cooldown)
 
         while True: 
-            print(f'__________Backgound Task Start__________')
+            print(f'__________Backgound Task Reactivation__________')
 
             race_html = current_race_week_html_data() # update race week data from calendar
             race_week = RaceWeek(race_html) # create RaceWeek object from newly gathered data
@@ -298,12 +314,12 @@ def run_discord_bot():
             session_name = next_session.session_name
             
             try:
-                print(f'Next session: {next_session.session_name} starts in {remaining_time} seconds')
+                print(f'Checking next session: {next_session.session_name} starts in {remaining_time} seconds')
             
-                if session_name in ["FP1", "FP2", "FP3"]:
+                if session_name in ["Pierwszy trening", "Drugi trening", "Trzeci trening", "FP1", "FP2", "FP3"]:
                     if 0 < remaining_time <= 15*60:
                         await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time/60} minut**:checkered_flag:")
-                        print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time/60} MINUT")
+                        print(f"{session_name} STARTS IN {remaining_time/60} MINUTES")
                         asyncio.create_task(annouce_session_start(next_session,channel))
                         cooldown = round(remaining_time)+300
                     else:
@@ -311,10 +327,10 @@ def run_discord_bot():
                             cooldown = remaining_time % 60
                         else: cooldown = 60
                         
-                if session_name in ["Kwalifikacje", "Wyścig"]:
+                if session_name in ["Kwalifikacje", "Wyścig", "Sprint", "Sprint Qualifying"]:
                     if 0 < remaining_time <= 30*60: 
                         await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time/60} minut**:checkered_flag:")
-                        print(f"{session_name} ZACZNIE SIĘ W CIAGU {remaining_time/60} MINUT")
+                        print(f"{session_name} STARTS IN {remaining_time/60} MINUTES")
                         asyncio.create_task(annouce_session_start(next_session,channel))
                         cooldown = int(remaining_time)+3600
                     else:
@@ -323,7 +339,7 @@ def run_discord_bot():
                         else: cooldown = 60
 
             except Exception as e:
-                print(f'**Praser retrived old race data** - ', e)
+                print(f'**BS4 retrived old race data** - ', e)
                 
             print(f'________Cooldown for {cooldown} seconds________')
             await asyncio.sleep(cooldown)
@@ -335,10 +351,10 @@ def run_discord_bot():
             print(f'Waiting for session start, time left: {remaining_time}')
 
             if remaining_time <=0:
-                await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session.session_name}** SIĘ ROZPOCZEŁY :checkered_flag:")
-                print(f"{session.session_name} SIĘ ZACZEŁA")
-                embed = session.get_session_embed(race_week)
+                print(f"\t{session.session_name} has begun")
+                embed = session.get_session_embed()
                 await channel.send(embed=embed)
+                await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session.session_name}** SIĘ ROZPOCZĄŁ :checkered_flag:")
                 return
             else: 
                 await asyncio.sleep(5)
@@ -392,7 +408,7 @@ def run_discord_bot():
 
         except Exception as e:
             print('Exepction', e)
-            await ctx.send('Musisz poczekać, strona z której biorę info jest popsuta :(')
+            await ctx.send('Musisz poczekać, pobieram przestarzałe dane ze strony :(')
             await client.tree.sync()
 
     @f1.error
