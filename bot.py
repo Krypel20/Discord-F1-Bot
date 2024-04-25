@@ -11,6 +11,7 @@ load_dotenv()
 from async_commands import send_message
 
 TOKEN = os.getenv('TOKEN')
+# announcements_channel_id = 1224669338255233044
 announcements_channel_id = 1224669338255233044
 
 english_to_polish_months = {
@@ -219,12 +220,12 @@ class RaceWeek:
             self.datetime = datetime.strptime(f"{self.date} {self.time} {current_datetime.year}", "%d %b %H:%M %Y")
         
         def check_session_status(self, current_datetime=datetime.now()):
-            if self.session_name in ["FP1", "FP2", "FP3"]: 
-                session_duration = timedelta(hours=1, minutes=5)
-            elif self.session_name == 'Kwalifikacje':
-                session_duration = timedelta(hours=0, minutes=55)
+            if self.session_name in ["FP1", "FP2", "FP3","Pierwszy trening", 'Drugi trening', 'Trzeci trening', 'Sprint']: 
+                session_duration = timedelta(hours=1, minutes=15)
+            elif self.session_name in ['Kwalifikacje', 'Sprint Qualifying']:
+                session_duration = timedelta(hours=1, minutes=0)
             elif self.session_name == 'Wyścig':
-                session_duration = timedelta(hours=1, minutes=45)
+                session_duration = timedelta(hours=1, minutes=50)
             
             if self.datetime < current_datetime:
                 if current_datetime - self.datetime > session_duration:
@@ -252,7 +253,7 @@ class RaceWeek:
             elif self.check_session_status(current_datetime) == "🟢":
                 time_left = '**LIVE🟢**'
             else: 
-                time_left = "**ZAKOŃCZONE⚫**" 
+                time_left = "**ZAKOŃCZONY⚫**" 
                 
             return time_left
         
@@ -299,7 +300,7 @@ def run_discord_bot():
         remaining_time = next_session.time_left(current_datetime) # in seconds
         cooldown = remaining_time % 60
         print(f'__________Backgound Task Start__________')
-        print(f'First cooldown for {cooldown} seconds to even time')
+        print(f'First cooldown for {cooldown} seconds')
         await asyncio.sleep(cooldown)
 
         while True: 
@@ -318,10 +319,10 @@ def run_discord_bot():
             
                 if session_name in ["Pierwszy trening", "Drugi trening", "Trzeci trening", "FP1", "FP2", "FP3"]:
                     if 0 < remaining_time <= 15*60:
-                        await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time/60} minut**:checkered_flag:")
-                        print(f"{session_name} STARTS IN {remaining_time/60} MINUTES")
+                        await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{round(remaining_time/60)} minut**:checkered_flag:")
+                        print(f"{session_name} STARTS IN {round(remaining_time/60)} MINUTES")
                         asyncio.create_task(annouce_session_start(next_session,channel))
-                        cooldown = round(remaining_time)+300
+                        cooldown = round(remaining_time)+4500
                     else:
                         if remaining_time % 60 > 0:
                             cooldown = remaining_time % 60
@@ -329,10 +330,10 @@ def run_discord_bot():
                         
                 if session_name in ["Kwalifikacje", "Wyścig", "Sprint", "Sprint Qualifying"]:
                     if 0 < remaining_time <= 30*60: 
-                        await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{remaining_time/60} minut**:checkered_flag:")
-                        print(f"{session_name} STARTS IN {remaining_time/60} MINUTES")
+                        await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{round(remaining_time/60)} minut**:checkered_flag:")
+                        print(f"{session_name} STARTS IN {round(remaining_time/60)} MINUTES")
                         asyncio.create_task(annouce_session_start(next_session,channel))
-                        cooldown = int(remaining_time)+3600
+                        cooldown = int(remaining_time)+5400
                     else:
                         if remaining_time % 60 > 0:
                             cooldown = remaining_time % 60
@@ -348,16 +349,17 @@ def run_discord_bot():
         while True:
             current_datetime = datetime.now()
             remaining_time = round(session.time_left(current_datetime)) # in seconds
-            print(f'Waiting for session start, time left: {remaining_time}')
 
             if remaining_time <=0:
-                print(f"\t{session.session_name} has begun")
+                print(f"\t-----{session.session_name} has begun-----")
                 embed = session.get_session_embed()
                 await channel.send(embed=embed)
                 await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session.session_name}** SIĘ ROZPOCZĄŁ :checkered_flag:")
+                print(f"\t-----------------------------------------------")
                 return
-            else: 
-                await asyncio.sleep(5)
+            else:
+                print(f'Waiting {remaining_time+1} seconds to annouce session')
+                await asyncio.sleep(remaining_time)
 
     @client.event
     async def on_ready():
@@ -420,7 +422,9 @@ def run_discord_bot():
     async def results(ctx):
         embed = discord.Embed(title=f"Wyniki weekendu wyścigowego", color=0xEF1A2D)
         view = View()
-        button = Button(label='Wyniki sesji', emoji='🏁', url=f'https://www.formula1.com/en/results.html/2024/races/{race_results_url_id(current_race_week_html_data())}/race-result.html')
+        button = Button(label='Wyniki sesji', 
+                        emoji='🏁', 
+                        url=f'https://www.formula1.com/en/results.html/2024/races/{race_results_url_id(current_race_week_html_data())}/race-result.html')
         view.add_item(button)
         await ctx.send(embed=embed, view=view)
         await client.tree.sync()
