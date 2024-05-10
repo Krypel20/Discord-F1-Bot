@@ -92,8 +92,103 @@ def current_race_week_html_data():
     else:
         print("***could not read website HTML file***")
 
-def race_results_url_id(race):
-    race_id = race.get('id')
+def race_week_results_urls(race_id):
+    results_page = f"https://www.formula1.com/en/results.html/2024/races/{race_id}/race-result.html"
+    response = requests.get(results_page)
+    
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.content, 'html.parser')
+        page = soup.find("div", class_="resultsarchive-content group")
+        
+        p_elements = page.find_all("p")
+        if any(p.string == "No results are currently available" for p in p_elements):
+            return 0
+        
+        else:
+            session_list = page.find("ul", class_="resultsarchive-side-nav").find_all('li')
+            sessions_results_urls = {}
+            
+            for session in session_list:
+                a_tag = session.find('a')
+                
+                if a_tag:
+                    url = "https://www.formula1.com" + a_tag['href']
+                    text = a_tag.text.strip()
+                    
+                    sessions_results_urls[text] = url
+                    
+            return sessions_results_urls
+
+def remove_duplicates(header_list):
+    seen = set()
+    result = []
+    
+    for item in header_list:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    
+    return result
+
+def get_results_table(url):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    session_results = soup.find("table", class_="resultsarchive-table")
+    session_results_thead = session_results.find('thead')
+    thead_rows = session_results_thead.find_all('tr')
+    thead_cols = []
+
+    for thead_row in thead_rows:
+        thead_cols_row = thead_row.find_all(['th', 'abbr'])
+        thead_cols_row = [ele.text.strip() for ele in thead_cols_row if ele.text.strip()]
+        thead_cols_row = remove_duplicates(thead_cols_row)
+        thead_cols_row.pop(1) # delete NO column
+        thead_cols_row.pop(2) # delete CAR column
+        thead_cols_row.pop(0) # delete POS column
+        thead_cols.extend(thead_cols_row)
+        
+    session_results_body = session_results.find('tbody')
+    rows = session_results_body.find_all('tr')
+    session_results = []
+
+    for row in rows:
+        cols = row.find_all('td')
+        cols = [ele.text.strip() for ele in cols if ele.text.strip()]
+        cols.pop(1) # delete NO column
+        cols.pop(2) # delete CAR column
+        cols.pop(0) # delete POS column
+        # Modify driver name printout
+        if len(cols) > 1:
+            driver_name_parts = cols[0].split('\n')
+            driver_name = ' '.join(driver_name_parts[:-1]) # driver_name = driver_name_parts[-1]
+            cols[0] = driver_name
+        
+        session_results.append(cols)
+
+    print("\n\n", thead_cols, session_results)
+    return thead_cols, session_results
+
+
+# TEST
+sessions_results_list = race_week_results_urls("1234/miami")
+for text, url in sessions_results_list.items():
+    print(f'Text: {text}, url: {url}')
+
+# get latest session results table
+table_headers, table_rows = get_results_table(next(iter(sessions_results_list.values())))
+
+#table headers printout
+previous_header = None
+for header in table_headers:
+    if header != previous_header:
+        print(header)
+        previous_header = header
+
+# # get specific session results table
+# get_results_table(sessions_results_list.get("Sprint Qualifying"))
+
+def race_results_url_id(race_html):
+    race_id = race_html.get('id')
     get_current_race_url = lambda race_id: race_place_html_adress.get(race_id, ":question:")
     return get_current_race_url(race_id)
 
@@ -272,20 +367,19 @@ class RaceWeek:
                 embed.add_field(name="", value=f":calendar_spiral: {self.weekday}", inline=True)
                 embed.add_field(name="", value=f":alarm_clock: **{self.time}**", inline=True)
                 embed.add_field(name="", value=f"{time_left}", inline=False)
-                print(f"EMBED CREATED:\n\t{self.check_session_status()} {race_week.name} - {self.session_name} {self.flag_emoji}")
-                print(f"\t:calendar_spiral: {self.weekday}")
-                print(f"\t:alarm_clock: **{self.time}**")
-                print(f"\t{time_left}")
+                # print(f"EMBED CREATED:\n\t{self.check_session_status()} {race_week.name} - {self.session_name} {self.flag_emoji}")
+                # print(f"\t:calendar_spiral: {self.weekday}")
+                # print(f"\t:alarm_clock: **{self.time}**")
+                # print(f"\t{time_left}")
 
                 return embed
             
             except Exception as e:
                 print("Error:", e)
                 return None
-
+    
 race_html = current_race_week_html_data() #get current race week data from calendar
 race_week = RaceWeek(race_html) 
-
 
 def run_discord_bot():
     intents = discord.Intents.default() # or discord.Intents.all()
@@ -351,7 +445,7 @@ def run_discord_bot():
             remaining_time = round(session.time_left(current_datetime)) # in seconds
 
             if remaining_time <=0:
-                print(f"\t-----{session.session_name} has begun-----")
+                print(f"ANNOUCE SESSION START FUNCTION: \t-----{session.session_name} has begun-----")
                 embed = session.get_session_embed()
                 await channel.send(embed=embed)
                 await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session.session_name}** SIĘ ROZPOCZĄŁ :checkered_flag:")
@@ -420,11 +514,21 @@ def run_discord_bot():
     
     @client.hybrid_command(name="results", description="Last session results")
     async def results(ctx):
+        results_list = race_week_results_urls(race_results_url_id(race_html))
+        
+        if results_list != 0:
+            print("RESULTS COMMAND: \n")
+            for text, href in results_list.items():
+                print(f'Session: {text}, url: {href}')
+        else: 
+            print("RESULTS COMMAND: No results for current race week")
+            
         embed = discord.Embed(title=f"Wyniki weekendu wyścigowego", color=0xEF1A2D)
         view = View()
         button = Button(label='Wyniki sesji', 
                         emoji='🏁', 
-                        url=f'https://www.formula1.com/en/results.html/2024/races/{race_results_url_id(current_race_week_html_data())}/race-result.html')
+                        url=f'https://www.formula1.com/en/results.html/2024/races/{race_results_url_id(race_html)}/race-result.html')
+        
         view.add_item(button)
         await ctx.send(embed=embed, view=view)
         await client.tree.sync()
