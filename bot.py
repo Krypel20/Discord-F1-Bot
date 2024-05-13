@@ -4,6 +4,7 @@ from discord.ext import commands, tasks
 from discord.ui import Button, View
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
+from table2ascii import table2ascii as t2a, PresetStyle
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -92,7 +93,7 @@ def current_race_week_html_data():
     else:
         print("***could not read website HTML file***")
 
-def race_week_results_urls(race_id): #get url of race week sessions results from formula1.com page
+def race_week_results_urls(race_id): #get urls of race week sessions results from formula1.com page
     results_page = f"https://www.formula1.com/en/results.html/2024/races/{race_id}/race-result.html"
     response = requests.get(results_page)
     
@@ -118,11 +119,11 @@ def race_week_results_urls(race_id): #get url of race week sessions results from
                     
             return sessions_results_urls
 
-def remove_duplicates(header_list):
+def remove_duplicates(list):
     seen = set()
     result = []
     
-    for item in header_list:
+    for item in list:
         if item not in seen:
             seen.add(item)
             result.append(item)
@@ -143,7 +144,6 @@ def get_results_table_from_url(url): #returns table headers and table rows as tw
         thead_cols_row = remove_duplicates(thead_cols_row)
         thead_cols_row.pop(1) # delete NO column
         thead_cols_row.pop(2) # delete CAR column
-        thead_cols_row.pop(0) # delete POS column
         thead_cols.extend(thead_cols_row)
         
     session_results_body = session_results.find('tbody')
@@ -155,60 +155,16 @@ def get_results_table_from_url(url): #returns table headers and table rows as tw
         cols = [ele.text.strip() for ele in cols if ele.text.strip()]
         cols.pop(1) # delete NO column
         cols.pop(2) # delete CAR column
-        cols.pop(0) # delete POS column
         # Modify driver name printout
         if len(cols) > 1:
-            driver_name_parts = cols[0].split('\n')
+            driver_name_parts = cols[1].split('\n')
             driver_name = ' '.join(driver_name_parts[:-1]) # driver_name = driver_name_parts[-1]
-            cols[0] = driver_name
+            cols[1] = driver_name
         
         session_results.append(cols)
 
     # print("\n\n", thead_cols, session_results)
     return thead_cols, session_results
-
-# TEST
-url_for_each_sesssion_results = race_week_results_urls("1234/miami")
-
-if url_for_each_sesssion_results != 0:
-    # print in terminal
-    for session_name, url in url_for_each_sesssion_results.items():
-        print(f'Text: {session_name}, url: {url}')
-
-    # get latest session results table and session name
-    url = next(iter(url_for_each_sesssion_results.values()))
-    session_name = next(iter(url_for_each_sesssion_results.keys()))
-    table_headers, table_rows = get_results_table_from_url(url)
-
-    #test embed output
-    print(session_name)
-    print('\t'.join(table_headers))
-    for row in table_rows:
-        print('\t'.join(row))
-    
-    from table2ascii import table2ascii as t2a, PresetStyle
-
-    # In your command:
-    output = t2a(
-        header=table_headers,
-        body=table_rows,
-        style=PresetStyle.thin_compact
-    )
-    print(f"```\n{output}\n```")
-
-    # # # get specific session results table like "Sprint Qualifying"
-    # url = url_for_each_sesssion_results.get("Sprint")
-    # session_name = url_for_each_sesssion_results.get(url).keys()
-    # table_headers, table_rows = get_results_table_from_url(url)
-
-    # #test embed output
-    # print(session_name)
-    # print('\t'.join(table_headers))
-    # for row in table_rows:
-    #     print('\t'.join(row))
-
-else:
-    print("No results for this weekend")
 
 def race_results_url_id(race_html):
     race_id = race_html.get('id')
@@ -537,50 +493,43 @@ def run_discord_bot():
     
     @client.hybrid_command(name="results", description="Last session results")
     async def results(ctx):
-        url_for_each_sesssion_results = race_week_results_urls(race_results_url_id(race_html))
+        results_urls = race_week_results_urls(race_results_url_id(race_html))
+        # results_urls = race_week_results_urls("1234/miami")
+        view = View()
+        
+        if results_urls != 0:
+            
+            # prase latest session results from url list
+            url = next(iter(results_urls.values()))
+            session_name = next(iter(results_urls.keys()))
+            table_headers, table_rows = get_results_table_from_url(url) # prase results table from given url
 
-        if url_for_each_sesssion_results != 0:
-            # # print in terminal
-            # for session_name, url in url_for_each_sesssion_results.items():
-            #     print(f'Text: {session_name}, url: {url}')
-            # get latest session results table and session name
-            url = next(iter(url_for_each_sesssion_results.values()))
-            session_name = next(iter(url_for_each_sesssion_results.keys()))
-            table_headers, table_rows = get_results_table_from_url(url)
-
-            # #test embed output
-            # print(session_name)
-            # print('\t'.join(table_headers))
-            # for row in table_rows:
-            #     print('\t'.join(row))
-
-            # # # get specific session results table like "Sprint Qualifying"
-            # url = url_for_each_sesssion_results.get("Sprint")
-            # session_name = url_for_each_sesssion_results.get(url).keys()
-            # table_headers, table_rows = get_results_table_from_url(url)
-
-            # #test embed output
-            # print(session_name)
-            # print('\t'.join(table_headers))
-            # for row in table_rows:
-            #     print('\t'.join(row))
-
-            embed = discord.Embed(title=f"Wyniki {session_name}", color=0xEF1A2D)
-            view = View()
-            button = Button(label=f'strona F1 {session_name}', 
+            # Table printout
+            table = t2a(
+                header=table_headers,
+                body=table_rows,
+                style=PresetStyle.thin_compact
+            )
+            
+            print(f"{session_name}\n{table}\n")
+            embed = discord.Embed(title=f"{race_week.name} - {session_name} ", color=0xEF1A2D)
+            button = Button(label=f'Oficialna strona wyników', 
                             emoji='🏁', 
                             url=url)
             view.add_item(button)
-
+            
+            await ctx.send(embed=embed)
+            await ctx.channel.send(content=f"```\n{table}\n```", view=view) 
+            
         else:
-            embed = discord.Embed(title=f"Aktualnie brak wyników", color=0xEF1A2D)
-            view = View()
-            button = Button(label=f'Strona wyników aktualnego weekendu', 
+            embed = discord.Embed(title=f"Aktualnie brak wyników dla {race_week.name}", color=0xEF1A2D)
+            button = Button(label=f'Oficialna strona wyników', 
                             emoji='🏁', 
                             url=f'https://www.formula1.com/en/results.html/2024/races/{race_results_url_id(race_html)}/race-result.html')
             view.add_item(button)
-
-        await ctx.send(embed=embed, view=view)
+            
+            await ctx.send(embed=embed, view=view)
+            
         await client.tree.sync()
     
     @client.hybrid_command(name="standings", description="Current driver/constructor standings")
