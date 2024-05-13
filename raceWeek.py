@@ -29,8 +29,9 @@ def race_week_results_urls(race_id): #get urls of race week sessions results fro
     if response.status_code == 200:
         soup = BeautifulSoup(response.content, 'html.parser')
         page = soup.find("div", class_="resultsarchive-content group")
-        
+        track_name = soup.find("span", class_="circuit-info").string
         p_elements = page.find_all("p")
+        
         if any(p.string == "No results are currently available" for p in p_elements):
             return []
         else:
@@ -40,11 +41,11 @@ def race_week_results_urls(race_id): #get urls of race week sessions results fro
             for session in session_list:
                 a_tag = session.find('a')
 
-                if a_tag:
+                if a_tag and a_tag.text.strip() not in ["Pit stop summary"]:
                     url = "https://www.formula1.com" + a_tag['href']
                     text = a_tag.text.strip()
-
-                    sessions_results_urls.append((text, url))
+                    session_name = track_name+" - "+ text
+                    sessions_results_urls.append((session_name, url))
                     
             return sessions_results_urls
 
@@ -101,6 +102,16 @@ def get_session_names(race_html):
         name = session_name.contents[-1].strip()
         session_names.append(name)
     return session_names
+
+def add_missing_values(thead_cols, session_results): # filling in the blanks of the table
+    
+    for session_result in session_results:
+        if len(session_result) < len(thead_cols):
+            # add "-" at the end of the list for empty cell
+            for i in range(len(thead_cols)-len(session_result)):
+                session_result.append('-')
+
+    return session_results
 
 class RaceWeek:
 
@@ -194,7 +205,8 @@ class RaceWeek:
             
             session_results.append(cols)
 
-        print("\n\n", thead_cols, session_results)
+        session_results = add_missing_values(thead_cols, session_results)
+        # print("\n\n", thead_cols, session_results)
         return thead_cols, session_results
     
     class Session:
@@ -261,11 +273,6 @@ class RaceWeek:
                 embed.add_field(name="", value=f":calendar_spiral: {self.weekday}", inline=True)
                 embed.add_field(name="", value=f":alarm_clock: **{self.time}**", inline=True)
                 embed.add_field(name="", value=f"{time_left}", inline=False)
-                # print(f"EMBED CREATED:\n\t{self.check_session_status()} {race_week.name} - {self.session_name} {self.flag_emoji}")
-                # print(f"\t:calendar_spiral: {self.weekday}")
-                # print(f"\t:alarm_clock: **{self.time}**")
-                # print(f"\t{time_left}")
-
                 return embed
             
             except Exception as e:

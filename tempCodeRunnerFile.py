@@ -1,1 +1,2 @@
-url_for_each_sesssion_results = race_week_results_urls("1234/miami")
+
+load_dotenv()
