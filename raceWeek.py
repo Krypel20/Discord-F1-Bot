@@ -3,9 +3,9 @@ from utils import remove_duplicates, convert_to_Warsaw_time, convert_date_to_pol
 from constants import flags_emojis, race_place_html_adress
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
+from table2ascii import table2ascii as t2a, PresetStyle
 
-def current_race_week_html_data():
-    calendar_url = "https://f1calendar.com/pl"
+def current_race_week_html_data(calendar_url = "https://f1calendar.com/pl"):
     response = requests.get(calendar_url)
     
     if response.status_code == 200:
@@ -114,11 +114,15 @@ def add_missing_values(thead_cols, session_results): # filling in the blanks of 
     return session_results
 
 class RaceWeek:
-
-    def __init__(self, race_html = current_race_week_html_data()):
+    def __init__(self, race_html = current_race_week_html_data("https://f1calendar.com/pl"), f3 = False):
         self.id = race_html.get('id')
-        self.results_url_path = race_results_adress(self.id)
-        self.previous_results_url_path = get_previous_race_results_adress(self.results_url_path)
+        if f3 is True:
+            race_html = current_race_week_html_data("https://f3calendar.com/pl")
+        if f3 is False:
+            self.results_url_path = race_results_adress(self.id)
+            self.previous_results_url_path = get_previous_race_results_adress(self.results_url_path)
+            self.results_urls = race_week_results_urls(self.results_url_path)
+            self.previous_results_urls = race_week_results_urls(self.previous_results_url_path)
         self.flag_emoji = flags_emojis.get(self.id, ":question:")
         self.name = race_html.find("span", class_='').text
         session_names = get_session_names(race_html)
@@ -131,33 +135,14 @@ class RaceWeek:
         date_times = [time.text for time in date_times]
         date_times = convert_to_Warsaw_time(date_times)
         self.race_week_datetimes = list(zip(session_names, dates, date_times))
-        self.results_urls = race_week_results_urls(self.results_url_path)
-        self.previous_results_urls = race_week_results_urls(self.previous_results_url_path)
-        self.session = {}
         self.sessions = []
         
         # List of sessions as Session objects and single session model to inicialize each session
         for session_name, date, date_time in self.race_week_datetimes:
             session_obj = self.Session(session_name, date, date_time, self.name, self.flag_emoji)
             self.sessions.append(session_obj)
-            self.session[session_name] = session_obj
-
-        # Session object inicialization for each session (FP1, FP2, FP3, Quali, Race)
-        for session_name, date, date_time in self.race_week_datetimes:
-            if session_name in ["FP1"]:
-                self.FP1 = self.session[session_name]
-            elif session_name in ["FP2", "Sprint Qualifying"]:
-                self.FP2 = self.session[session_name]
-            elif session_name in ["FP3", "Sprint"]:
-                self.FP3 = self.session[session_name]
-            elif session_name == "Kwalifikacje":
-                self.Quali = self.session[session_name]
-            elif session_name == "Wyścig":
-                self.Race = self.session[session_name]
     
     def next_session(self, current_datetime=datetime.now()):
-        
-        print(f'current date time: {current_datetime}')
         for session in self.sessions:
             time_difference = session.datetime - current_datetime
             
@@ -207,7 +192,12 @@ class RaceWeek:
 
         session_results = add_missing_values(thead_cols, session_results)
         # print("\n\n", thead_cols, session_results)
-        return thead_cols, session_results
+        table = t2a(
+                header=thead_cols,
+                body=session_results,
+                style=PresetStyle.thin_compact
+            )
+        return table
     
     class Session:
         def __init__(self, session_name, date, time, week_name, flag_emoji):
@@ -219,17 +209,16 @@ class RaceWeek:
             self.time = time
             current_datetime = datetime.now()
             self.datetime = datetime.strptime(f"{self.date} {self.time} {current_datetime.year}", "%d %b %H:%M %Y")
-        
-        def check_session_status(self, current_datetime=datetime.now()):
-            if self.session_name in ["FP1", "FP2", "FP3","Pierwszy trening", 'Drugi trening', 'Trzeci trening', 'Sprint']: 
-                session_duration = timedelta(hours=1, minutes=15)
-            elif self.session_name in ['Kwalifikacje', 'Sprint Qualifying']:
-                session_duration = timedelta(hours=1, minutes=0)
+            if self.session_name in ["FP1", "FP2", "FP3","Pierwszy trening", 'Drugi trening', 'Trzeci trening', 'Sprint', 'Feature']: 
+                self.duration = timedelta(hours=1, minutes=15)
+            elif self.session_name in ['Kwalifikacje', 'Sprint Qualifying', 'Trening']:
+                self.duration = timedelta(hours=1, minutes=0)
             elif self.session_name == 'Wyścig':
-                session_duration = timedelta(hours=1, minutes=50)
-            
+                self.duration = timedelta(hours=1, minutes=50)
+        
+        def check_session_status(self, current_datetime=datetime.now()): 
             if self.datetime < current_datetime:
-                if current_datetime - self.datetime > session_duration:
+                if current_datetime - self.datetime > self.duration:
                     return "⚫"
                 else:
                     return "🟢"
@@ -278,4 +267,3 @@ class RaceWeek:
             except Exception as e:
                 print("Error:", e)
                 return None
-    
