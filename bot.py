@@ -4,7 +4,6 @@ from discord.ext import commands
 from discord.ui import Button, View
 from raceWeek import RaceWeek, drivers_standings, teams_standings
 from datetime import datetime
-from table2ascii import table2ascii as t2a, PresetStyle
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -15,41 +14,43 @@ TOKEN = os.getenv('TOKEN')
 # announcements_channel_id = 1224669338255233044
 announcements_channel_id = 1224669338255233044
 
-race_week = RaceWeek() 
+f1_week = RaceWeek(f3=False) 
+f3_week = RaceWeek(f3=True)
 
 def run_discord_bot():
     intents = discord.Intents.default() # or discord.Intents.all()
     intents.message_content = True
     client = commands.Bot(command_prefix='!', intents = intents)
     
-    async def background_task():
-        global race_week
+    async def update_data():
+        global f1_week, f3_week
+        cooldown = 60
+        while True:
+            f1_week = RaceWeek(f3 = False) # replace RaceWeek object from newly gathered data
+            f3_week = RaceWeek(f3 = True) # replace RaceWeek object from newly gathered data
+            print("update_data:\n\t Race week objects has been updated")
+            await asyncio.sleep(cooldown)
+    
+    async def f1_announcements_task():
         channel = client.get_channel(announcements_channel_id)
         current_datetime = datetime.now()
-        next_session = race_week.next_session(current_datetime)
+        next_session = f1_week.next_session(current_datetime)
         remaining_time = next_session.time_left(current_datetime) # in seconds
         cooldown = remaining_time % 60
-        print(f'__________Backgound Task Start__________')
-        print(f'First cooldown for {cooldown} seconds')
         await asyncio.sleep(cooldown)
 
         while True: 
-            print(f'__________Backgound Task Reactivation__________')
-
-            race_week = RaceWeek() # replace RaceWeek object from newly gathered data
             current_datetime = datetime.now()
-
-            next_session = race_week.next_session(current_datetime)
+            
+            next_session = f1_week.next_session(current_datetime)
             remaining_time = round(next_session.time_left(current_datetime)) # in seconds
             session_name = next_session.session_name
             
             try:
-                print(f'Checking next session: {next_session.session_name} starts in {remaining_time} seconds')
-            
-                if session_name in ["Pierwszy trening", "Drugi trening", "Trzeci trening", "FP1", "FP2", "FP3"]:
+                print(f'f1_announcements_task:\n\t{next_session.session_name} starts in {remaining_time} seconds')
+                if session_name in ["Pierwszy trening", "Drugi trening", "Trzeci trening", "FP1", "FP2", "FP3", "Trening"]:
                     if 0 < remaining_time <= 15*60:
-                        await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{round(remaining_time/60)} minut**:checkered_flag:")
-                        print(f"{session_name} STARTS IN {round(remaining_time/60)} MINUTES")
+                        await channel.send(f"<@&1224668671499178005> ### {next_session.session_name} zacznie się za **{round(remaining_time/60)} minut**:checkered_flag:")
                         asyncio.create_task(annouce_session_start(next_session,channel))
                         cooldown = round(remaining_time)+4500
                     else:
@@ -57,10 +58,9 @@ def run_discord_bot():
                             cooldown = remaining_time % 60
                         else: cooldown = 60
                         
-                if session_name in ["Kwalifikacje", "Wyścig", "Sprint", "Sprint Qualifying"]:
+                if session_name in ["Kwalifikacje", "Wyścig", "Sprint", "Sprint Qualifying", "Feature"]:
                     if 0 < remaining_time <= 30*60: 
-                        await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session_name}** zacznie się w ciągu **{round(remaining_time/60)} minut**:checkered_flag:")
-                        print(f"{session_name} STARTS IN {round(remaining_time/60)} MINUTES")
+                        await channel.send(f"<@&1224668671499178005> ### {next_session.session_name} zacznie się za **{round(remaining_time/60)} minut** :checkered_flag:")
                         asyncio.create_task(annouce_session_start(next_session,channel))
                         cooldown = int(remaining_time)+5400
                     else:
@@ -71,33 +71,96 @@ def run_discord_bot():
             except Exception as e:
                 print(f'**BS4 retrived old race data** - ', e)
                 
-            print(f'________Cooldown for {cooldown} seconds________')
+            print(f'\t cooldown for {cooldown}s')
             await asyncio.sleep(cooldown)
-    
+            
+    async def f3_announcements_task():
+        global f3_week
+        channel = client.get_channel(announcements_channel_id)
+        current_datetime = datetime.now()
+        next_session = f3_week.next_session(current_datetime)
+        remaining_time = next_session.time_left(current_datetime) # in seconds
+        cooldown = remaining_time % 60
+        await asyncio.sleep(cooldown)
+
+        while True: 
+            current_datetime = datetime.now()
+            
+            next_session = f3_week.next_session(current_datetime)
+            remaining_time = round(next_session.time_left(current_datetime)) # in seconds
+            session_name = next_session.session_name
+            
+            try:
+                print(f'f3_announcements_task:\n\t {next_session.session_name} starts in {remaining_time} seconds')
+                if session_name in ["Pierwszy trening", "Drugi trening", "Trzeci trening", "Trening"]:
+                    if 0 < remaining_time <= 15*60:
+                        await channel.send(f"<@&1224668671499178005> ###(F3) Polacy będą jeździć za **{round(remaining_time/60)} minut**:checkered_flag:")
+                        asyncio.create_task(annouce_session_start(next_session,channel))
+                        cooldown = round(remaining_time)+4500
+                    else:
+                        if remaining_time % 60 > 0:
+                            cooldown = remaining_time % 60
+                        else: cooldown = 60
+                        
+                if session_name in ["Kwalifikacje", "Wyścig", "Sprint", "Sprint Qualifying", "Feature"]:
+                    if 0 < remaining_time <= 30*60: 
+                        await channel.send(f"<@&1224668671499178005> ###(F3) Polacy będą ścigać się za **{round(remaining_time/60)} minut** :checkered_flag:")
+                        asyncio.create_task(annouce_session_start(next_session,channel))
+                        cooldown = int(remaining_time)+5400
+                    else:
+                        if remaining_time % 60 > 0:
+                            cooldown = remaining_time % 60
+                        else: cooldown = 60
+
+            except Exception as e:
+                print(f'**BS4 retrived old race data** - ', e)
+                
+            print(f'\t cooldown for {cooldown}s')
+            await asyncio.sleep(cooldown)
+            
     async def annouce_session_start(session, channel):
         while True:
             current_datetime = datetime.now()
             remaining_time = round(session.time_left(current_datetime)) # in seconds
 
             if remaining_time <=0:
-                print(f"ANNOUCE SESSION START FUNCTION: \t-----{session.session_name} has begun-----")
+                print(f"annouce_session_start:\n\t{session.session_name} has begun")
                 embed = session.get_session_embed()
                 await channel.send(embed=embed)
-                await channel.send(f"<@&1224668671499178005> :checkered_flag: **{session.session_name}** SIĘ ROZPOCZĄŁ :checkered_flag:")
-                print(f"\t-----------------------------------------------")
+                await channel.send(f"<@&1224668671499178005> ### :checkered_flag: **{session.session_name}** SIĘ ROZPOCZĄŁ :checkered_flag:")
                 return
             else:
-                print(f'Waiting {remaining_time+1} seconds to annouce session')
+                print(f'annouce_session_start:\n\tWaiting {remaining_time+1} seconds to annouce {session.session_name}')
                 await asyncio.sleep(remaining_time)
 
+    async def annouce_session_end(session, channel):
+        fun_start_time = datetime.now()
+        while True:
+            current_datetime = datetime.now()
+            remaining_time = session.duration.seconds - (current_datetime.seconds - fun_start_time.seconds)
+            
+            if current_datetime >= session.datetime + session.duration:
+                print(f"annouce_session_end:\n\t{session.session_name} has ended")
+                result = f1_week.results_urls
+                url = result[0][1]
+                table = f1_week.get_results_table_from_url(url)
+                await channel.send(f"<@&1224668671499178005> ### :checkered_flag: **{session.session_name}** się zakończył :checkered_flag: Rezultat: \n```\n{table}\n```")
+                return
+            else:
+                print(f'annouce_session_end: \n\tWaiting {remaining_time+30} seconds to annouce {session.session_name} end')
+                await asyncio.sleep(remaining_time)
+    
     @client.event
     async def on_ready():
         await client.tree.sync()
         await client.change_presence(activity=discord.activity.Game(name="FORZA FERRARI"), status=discord.Status.do_not_disturb)
-        print(f'{client.user.name} is now running!')
-        
+                
         #starting asynchronous functions to run in the background
-        asyncio.create_task(background_task())
+        asyncio.create_task(f1_announcements_task())
+        asyncio.create_task(f3_announcements_task())
+        asyncio.create_task(update_data())
+        
+        print(f'{client.user.name} is now running!')
         
     @client.hybrid_command(name="ping", description="It will show my ping")
     async def ping(interacion : Interaction):
@@ -106,21 +169,19 @@ def run_discord_bot():
         await client.tree.sync()
     
     COOLDOWN_SECONDS = 10
-    @client.hybrid_command(name="f1", description="Info about current race week")
+    @client.hybrid_command(name="f1", description="Info about current F1 race week")
     @commands.cooldown(1, COOLDOWN_SECONDS, commands.BucketType.default)
     async def f1(ctx):
-        global race_week, race_html
-        
         try: 
-            embed = discord.Embed(title=f"{race_week.flag_emoji} {race_week.name} {race_week.flag_emoji} ‏ ‎ ‎ ‎ :calendar:{race_week.week_start} - {race_week.week_end} ", color=0xEF1A2D)
+            embed = discord.Embed(title=f"{f1_week.flag_emoji} {f1_week.name} {f1_week.flag_emoji} ‏ ‎ ‎ ‎ :calendar:{f1_week.week_start} - {f1_week.week_end} ", color=0xEF1A2D)
             thumbnail = "https://cdn.discordapp.com/emojis/734895858725683314.webp?size=96&quality=lossless"
             embed.add_field(name="", value="", inline=False)
             embed.set_thumbnail(url=thumbnail)
             current_datetime = datetime.now()
-            next_session = race_week.next_session()
-            current_session = race_week.current_session()
+            next_session = f1_week.next_session()
+            current_session = f1_week.current_session()
             
-            for session in race_week.sessions:
+            for session in f1_week.sessions:
                 embed.add_field(name="", value=f"{session.check_session_status(current_datetime)} **{session.session_name}**", inline=True)
                 embed.add_field(name="", value=f":calendar_spiral: {session.weekday}", inline=True)
                 embed.add_field(name="", value=f":alarm_clock: **{session.time}**", inline=True)
@@ -138,10 +199,39 @@ def run_discord_bot():
             await client.tree.sync()
 
         except Exception as e:
-            print('Exepction', e)
+            print('f1 command: \tExepction', e)
             await ctx.send('Musisz poczekać, pobieram przestarzałe dane ze strony :(')
             await client.tree.sync()
-
+    
+    @client.hybrid_command(name="f3", description="Info about current F3 race week")
+    async def f3(ctx):
+        global f3_week
+        
+        embed = discord.Embed(title=f"{f3_week.flag_emoji} {f3_week.name} {f3_week.flag_emoji} ‏ ‎ ‎ ‎ :calendar:{f3_week.week_start} - {f3_week.week_end} ", color=0xffffff)
+        thumbnail = "https://cdn.7tv.app/emote/63ffbc06a27fda24e80733d7/4x.webp"
+        embed.add_field(name="", value="", inline=False)
+        embed.set_thumbnail(url=thumbnail)
+        current_datetime = datetime.now()
+        next_session = f3_week.next_session()
+        current_session = f3_week.current_session()
+        
+        for session in f3_week.sessions:
+            embed.add_field(name="", value=f"{session.check_session_status(current_datetime)} **{session.session_name}**", inline=True)
+            embed.add_field(name="", value=f":calendar_spiral: {session.weekday}", inline=True)
+            embed.add_field(name="", value=f":alarm_clock: **{session.time}**", inline=True)
+            
+            if session.session_name == next_session.session_name:
+                time_left = session.session_starts_in(current_datetime)
+                embed.add_field(name="", value=f"{time_left}", inline=False)
+            elif current_session is not None and session.session_name == current_session.session_name:
+                time_left = session.session_starts_in(current_datetime)
+                embed.add_field(name="", value=f"{time_left}", inline=False)
+            
+            embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
+            
+        await ctx.send(embed=embed)
+        await client.tree.sync()
+            
     @f1.error
     async def f1_error(ctx, error):
         if isinstance(error, commands.CommandOnCooldown):
@@ -151,12 +241,12 @@ def run_discord_bot():
     async def results(ctx):
         global iteration
         iteration = 0
-        results_urls = race_week.results_urls + race_week.previous_results_urls
+        results_urls = f1_week.results_urls + f1_week.previous_results_urls
         button_results = Button(label=f'Oficialna strona wyników',
                         emoji='🏁',
-                        url=f'https://www.formula1.com/en/results.html/2024/races/{race_week.results_url_path}/race-result.html')
-        button_previous = Button(label="Poprzednia sesja", style=discord.ButtonStyle.green, emoji="⏮")
-        button_next = Button(label="Następna sesja", style=discord.ButtonStyle.green, emoji="⏭", disabled=True)
+                        url=f'https://www.formula1.com/en/results.html/2024/races/{f1_week.results_url_path}/race-result.html')
+        button_previous = Button(label="Poprzednia sesja", style=discord.ButtonStyle.red, emoji="⏮")
+        button_next = Button(label="Następna sesja", style=discord.ButtonStyle.red, emoji="⏭", disabled=True)
         view = View()
         
         async def button_previous_callback(interaction):
@@ -169,14 +259,8 @@ def run_discord_bot():
                 
             url = results_urls[iteration][1]
             session_name = results_urls[iteration][0]
-            table_headers, table_rows = race_week.get_results_table_from_url(url)  # prase results table from given url
-            table = t2a(
-                header=table_headers,
-                body=table_rows,
-                style=PresetStyle.thin_compact
-            )
+            table =  f1_week.get_results_table_from_url(url)  # prase results table from given url
             button_results.url = url
-            print(f"\t{session_name}\n{table}\n")
             await interaction.response.edit_message(content=f"## {session_name}\n```\n{table}\n```{iteration+1} z {len(results_urls)}", view=view)
         
         async def button_next_callback(interaction):
@@ -189,27 +273,15 @@ def run_discord_bot():
                
             url = results_urls[iteration][1]
             session_name = results_urls[iteration][0]
-            table_headers, table_rows = race_week.get_results_table_from_url(url)  # prase results table from given url
-            table = t2a(
-                header=table_headers,
-                body=table_rows,
-                style=PresetStyle.thin_compact
-            )
+            table = f1_week.get_results_table_from_url(url)  # prase results table from given url
             button_results.url = url
-            print(f"\t{session_name}\n{table}\n")
             await interaction.response.edit_message(content=f"## {session_name}\n```\n{table}\n```{iteration+1} z {len(results_urls)}", view=view)
 
         if results_urls:
             # prase latest session results from url list
             url = results_urls[iteration][1]
             session_name = results_urls[iteration][0]
-            table_headers, table_rows = race_week.get_results_table_from_url(url)  # prase results table from given url
-            table = t2a(
-                header=table_headers,
-                body=table_rows,
-                style=PresetStyle.thin_compact
-            )
-            print(f"\t{session_name}\n{table}\n")
+            table = f1_week.get_results_table_from_url(url)  # prase results table from given url
             button_results.url = button_results.url = url
             button_previous.callback = button_previous_callback
             button_next.callback = button_next_callback
@@ -219,8 +291,8 @@ def run_discord_bot():
             await ctx.send(content=f"## {session_name}\n```\n{table}\n```{iteration+1} z {len(results_urls)}", view=view)
             
         else:
-            embed = discord.Embed(title=f"Aktualnie brak wyników {race_week.name}", color=0xEF1A2D)
-            button_results.url = f'https://www.formula1.com/en/results.html/2024/races/{race_week.results_url_path}/race-result.html'
+            embed = discord.Embed(title=f"Aktualnie brak wyników {f1_week.name}", color=0xEF1A2D)
+            button_results.url = f'https://www.formula1.com/en/results.html/2024/races/{f1_week.results_url_path}/race-result.html'
             button_previous.callback = button_previous_callback
             view.add_item(button_previous)
             view.add_item(button_results)

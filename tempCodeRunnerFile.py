@@ -1,2 +1,2 @@
 
-load_dotenv()
+race_week = RaceWeek(race_html)
