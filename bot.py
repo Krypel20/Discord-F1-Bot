@@ -33,19 +33,17 @@ def run_discord_bot():
     
     async def f1_announcements_task():
         channel = client.get_channel(announcements_channel_id)
-        current_datetime = datetime.now()
-        next_session = f1_week.next_session(current_datetime)
-        remaining_time = next_session.time_left(current_datetime) # in seconds
-        cooldown = remaining_time % 60
-        await asyncio.sleep(cooldown)
 
-        while True: 
+        while True:
             current_datetime = datetime.now()
-            
             next_session = f1_week.next_session(current_datetime)
-            remaining_time = round(next_session.time_left(current_datetime)) # in seconds
             session_name = next_session.session_name
-            
+            if next_session.time_left() < 0:
+                cooldown = 60
+            else:
+                remaining_time = round(next_session.time_left(current_datetime)) # in seconds
+                cooldown = remaining_time % 60
+                
             try:
                 print(f'f1_announcements_task:\n\t{next_session.session_name} starts in {remaining_time} seconds')
                 if session_name in ["Pierwszy trening", "Drugi trening", "Trzeci trening", "FP1", "FP2", "FP3", "Trening"]:
@@ -67,30 +65,26 @@ def run_discord_bot():
                         if remaining_time % 60 > 0:
                             cooldown = remaining_time % 60
                         else: cooldown = 60
-
             except Exception as e:
-                print(f'**BS4 retrived old race data** - ', e)
+                print(f'\t**BS4 retrived old race data**')
                 
             print(f'\t cooldown for {cooldown}s')
             await asyncio.sleep(cooldown)
-            
+                      
     async def f3_announcements_task():
-        global f3_week
         channel = client.get_channel(announcements_channel_id)
-        current_datetime = datetime.now()
-        next_session = f3_week.next_session(current_datetime)
-        remaining_time = next_session.time_left(current_datetime) # in seconds
-        cooldown = remaining_time % 60
-        await asyncio.sleep(cooldown)
 
         while True: 
             current_datetime = datetime.now()
-            
             next_session = f3_week.next_session(current_datetime)
-            remaining_time = round(next_session.time_left(current_datetime)) # in seconds
             session_name = next_session.session_name
-            
-            try:
+            if next_session.time_left() < 0:
+                cooldown = 60
+            else:
+                remaining_time = round(next_session.time_left(current_datetime)) # in seconds
+                cooldown = remaining_time % 60
+                
+            try:      
                 print(f'f3_announcements_task:\n\t {next_session.session_name} starts in {remaining_time} seconds')
                 if session_name in ["Pierwszy trening", "Drugi trening", "Trzeci trening", "Trening"]:
                     if 0 < remaining_time <= 15*60:
@@ -101,7 +95,7 @@ def run_discord_bot():
                         if remaining_time % 60 > 0:
                             cooldown = remaining_time % 60
                         else: cooldown = 60
-                        
+                                              
                 if session_name in ["Kwalifikacje", "Wyścig", "Sprint", "Sprint Qualifying", "Feature"]:
                     if 0 < remaining_time <= 30*60: 
                         await channel.send(f"<@&1224668671499178005> ###(F3) Polacy będą ścigać się za **{round(remaining_time/60)} minut** :checkered_flag:")
@@ -110,24 +104,23 @@ def run_discord_bot():
                     else:
                         if remaining_time % 60 > 0:
                             cooldown = remaining_time % 60
-                        else: cooldown = 60
-
+                        else: cooldown = 60  
             except Exception as e:
-                print(f'**BS4 retrived old race data** - ', e)
+                print(f'\t**BS4 retrived old race data** - ', e)
                 
             print(f'\t cooldown for {cooldown}s')
             await asyncio.sleep(cooldown)
-            
+                
     async def annouce_session_start(session, channel):
         while True:
-            current_datetime = datetime.now()
-            remaining_time = round(session.time_left(current_datetime)) # in seconds
+            remaining_time = round(session.time_left()) # in seconds
 
             if remaining_time <=0:
                 print(f"annouce_session_start:\n\t{session.session_name} has begun")
                 embed = session.get_session_embed()
                 await channel.send(embed=embed)
                 await channel.send(f"<@&1224668671499178005> ### :checkered_flag: **{session.session_name}** SIĘ ROZPOCZĄŁ :checkered_flag:")
+                asyncio.create_task(annouce_session_end(session,channel))
                 return
             else:
                 print(f'annouce_session_start:\n\tWaiting {remaining_time+1} seconds to annouce {session.session_name}')
@@ -206,31 +199,35 @@ def run_discord_bot():
     @client.hybrid_command(name="f3", description="Info about current F3 race week")
     async def f3(ctx):
         global f3_week
-        
-        embed = discord.Embed(title=f"{f3_week.flag_emoji} {f3_week.name} {f3_week.flag_emoji} ‏ ‎ ‎ ‎ :calendar:{f3_week.week_start} - {f3_week.week_end} ", color=0xffffff)
-        thumbnail = "https://cdn.7tv.app/emote/63ffbc06a27fda24e80733d7/4x.webp"
-        embed.add_field(name="", value="", inline=False)
-        embed.set_thumbnail(url=thumbnail)
-        current_datetime = datetime.now()
-        next_session = f3_week.next_session()
-        current_session = f3_week.current_session()
-        
-        for session in f3_week.sessions:
-            embed.add_field(name="", value=f"{session.check_session_status(current_datetime)} **{session.session_name}**", inline=True)
-            embed.add_field(name="", value=f":calendar_spiral: {session.weekday}", inline=True)
-            embed.add_field(name="", value=f":alarm_clock: **{session.time}**", inline=True)
+        try:
+            embed = discord.Embed(title=f"{f3_week.flag_emoji} {f3_week.name} {f3_week.flag_emoji} ‏ ‎ ‎ ‎ :calendar:{f3_week.week_start} - {f3_week.week_end} ", color=0xffffff)
+            thumbnail = "https://cdn.7tv.app/emote/63ffbc06a27fda24e80733d7/4x.webp"
+            embed.add_field(name="", value="", inline=False)
+            embed.set_thumbnail(url=thumbnail)
+            current_datetime = datetime.now()
+            next_session = f3_week.next_session()
+            current_session = f3_week.current_session()
             
-            if session.session_name == next_session.session_name:
-                time_left = session.session_starts_in(current_datetime)
-                embed.add_field(name="", value=f"{time_left}", inline=False)
-            elif current_session is not None and session.session_name == current_session.session_name:
-                time_left = session.session_starts_in(current_datetime)
-                embed.add_field(name="", value=f"{time_left}", inline=False)
-            
-            embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
-            
-        await ctx.send(embed=embed)
-        await client.tree.sync()
+            for session in f3_week.sessions:
+                embed.add_field(name="", value=f"{session.check_session_status(current_datetime)} **{session.session_name}**", inline=True)
+                embed.add_field(name="", value=f":calendar_spiral: {session.weekday}", inline=True)
+                embed.add_field(name="", value=f":alarm_clock: **{session.time}**", inline=True)
+                
+                if session.session_name == next_session.session_name:
+                    time_left = session.session_starts_in(current_datetime)
+                    embed.add_field(name="", value=f"{time_left}", inline=False)
+                elif current_session is not None and session.session_name == current_session.session_name:
+                    time_left = session.session_starts_in(current_datetime)
+                    embed.add_field(name="", value=f"{time_left}", inline=False)
+                
+                embed.add_field(name="", value=f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
+                
+            await ctx.send(embed=embed)
+            await client.tree.sync()
+        except Exception as e:
+            print('f1 command: \tExepction', e)
+            await ctx.send('Musisz poczekać, pobieram przestarzałe dane ze strony :(')
+            await client.tree.sync()
             
     @f1.error
     async def f1_error(ctx, error):
@@ -354,3 +351,10 @@ def run_discord_bot():
             await send_message(message, user_message, is_private=False)
     
     client.run(TOKEN)
+    
+#test
+for session in f3_week.sessions:
+    print(session.session_name, session.time_left())
+
+for session in f1_week.sessions:
+    print(session.session_name, session.time_left())
