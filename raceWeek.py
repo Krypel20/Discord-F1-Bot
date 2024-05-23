@@ -2,7 +2,7 @@ import requests, discord
 from utils import remove_duplicates, convert_to_Warsaw_time, convert_date_to_polish_months, convert_date_to_weekday
 from constants import flags_emojis, race_place_html_adress
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from table2ascii import table2ascii as t2a, PresetStyle
 
 def current_race_week_html_data(calendar_url = "https://f1calendar.com/pl"):
@@ -11,14 +11,16 @@ def current_race_week_html_data(calendar_url = "https://f1calendar.com/pl"):
     if response.status_code == 200:
         soup = BeautifulSoup(response.content, 'html.parser')
         races = soup.find_all("tbody")
+        today = datetime.now().date()
         
         for race in races:
             th = race.find('th', class_='flex p-4')
             if th:
-                race_status = race.find("span", string="Nadchodzący")
-                if race_status:
+                dates = [date.text for date in race.find_all("td", class_="text-right md:text-left")]
+                race_date = datetime.strptime(f"{dates[-1].strip()} {today.year}", "%d %b %Y").date()
+
+                if race_date>=today:
                     return race
-                else: pass
     else:
         print("***could not read website HTML file***")
 
@@ -134,6 +136,8 @@ class RaceWeek:
         self.week_end = datesPL[-1]
         date_times = [time.text for time in date_times]
         date_times = convert_to_Warsaw_time(date_times)
+        if len(date_times)>5: #if the prased website is not updated correctly race date may be on the first and last position in the table
+            date_times.pop(0)
         self.race_week_datetimes = list(zip(session_names, dates, date_times))
         self.sessions = []
         

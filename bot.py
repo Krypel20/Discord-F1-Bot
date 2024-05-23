@@ -48,7 +48,7 @@ def run_discord_bot():
                 print(f'f1_announcements_task:\n\t{next_session.session_name} starts in {remaining_time} seconds')
                 if session_name in ["Pierwszy trening", "Drugi trening", "Trzeci trening", "FP1", "FP2", "FP3", "Trening"]:
                     if 0 < remaining_time <= 15*60:
-                        await channel.send(f"<@&1224668671499178005> ### {next_session.session_name} zacznie się za **{round(remaining_time/60)} minut**:checkered_flag:")
+                        await channel.send(f"### <@&1224668671499178005> {next_session.session_name} zacznie się za **{round(remaining_time/60)} minut**:checkered_flag:")
                         asyncio.create_task(annouce_session_start(next_session,channel))
                         cooldown = round(remaining_time)+4500
                     else:
@@ -58,7 +58,7 @@ def run_discord_bot():
                         
                 if session_name in ["Kwalifikacje", "Wyścig", "Sprint", "Sprint Qualifying", "Feature"]:
                     if 0 < remaining_time <= 30*60: 
-                        await channel.send(f"<@&1224668671499178005> ### {next_session.session_name} zacznie się za **{round(remaining_time/60)} minut** :checkered_flag:")
+                        await channel.send(f"### <@&1224668671499178005> {next_session.session_name} zacznie się za **{round(remaining_time/60)} minut** :checkered_flag:")
                         asyncio.create_task(annouce_session_start(next_session,channel))
                         cooldown = int(remaining_time)+5400
                     else:
@@ -88,7 +88,7 @@ def run_discord_bot():
                 print(f'f3_announcements_task:\n\t {next_session.session_name} starts in {remaining_time} seconds')
                 if session_name in ["Pierwszy trening", "Drugi trening", "Trzeci trening", "Trening"]:
                     if 0 < remaining_time <= 15*60:
-                        await channel.send(f"<@&1224668671499178005> ###(F3) Polacy będą jeździć za **{round(remaining_time/60)} minut**:checkered_flag:")
+                        await channel.send(f"### <@&1224668671499178005> (F3) Polacy będą jeździć za **{round(remaining_time/60)} minut**:checkered_flag:")
                         asyncio.create_task(annouce_session_start(next_session,channel))
                         cooldown = round(remaining_time)+4500
                     else:
@@ -98,7 +98,7 @@ def run_discord_bot():
                                               
                 if session_name in ["Kwalifikacje", "Wyścig", "Sprint", "Sprint Qualifying", "Feature"]:
                     if 0 < remaining_time <= 30*60: 
-                        await channel.send(f"<@&1224668671499178005> ###(F3) Polacy będą ścigać się za **{round(remaining_time/60)} minut** :checkered_flag:")
+                        await channel.send(f"### <@&1224668671499178005> (F3) Polacy będą ścigać się za **{round(remaining_time/60)} minut** :checkered_flag:")
                         asyncio.create_task(annouce_session_start(next_session,channel))
                         cooldown = int(remaining_time)+5400
                     else:
@@ -113,13 +113,14 @@ def run_discord_bot():
                 
     async def annouce_session_start(session, channel):
         while True:
-            remaining_time = round(session.time_left()) # in seconds
+            current_time = datetime.now()
+            remaining_time = round(session.time_left(current_time)) # in seconds
 
             if remaining_time <=0:
                 print(f"annouce_session_start:\n\t{session.session_name} has begun")
                 embed = session.get_session_embed()
                 await channel.send(embed=embed)
-                await channel.send(f"<@&1224668671499178005> ### :checkered_flag: **{session.session_name}** SIĘ ROZPOCZĄŁ :checkered_flag:")
+                await channel.send(f"### <@&1224668671499178005> :checkered_flag: **{session.session_name}** SIĘ ROZPOCZĄŁ :checkered_flag:")
                 asyncio.create_task(annouce_session_end(session,channel))
                 return
             else:
