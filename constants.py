@@ -31,7 +31,7 @@ flags_emojis = {
     "abu-dhabi-grand-prix": ":flag_ae:"
 }
 
-race_place_html_adress = { # location folder from www.formula1.com website
+race_place_html_adress = { # results location folder from formula1 official website. Example: for "emilia-romagna-grand-prix" -> url adress = https://www.formula1.com/en/results.html/2024/races/1235/italy/result.html
     "bahrain-grand-prix": "1229/bahrain",
     "saudi-arabia-grand-prix": "1230/saudi-arabia",
     "australian-grand-prix": "1231/australia",

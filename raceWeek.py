@@ -2,7 +2,7 @@ import requests, discord
 from utils import remove_duplicates, convert_to_Warsaw_time, convert_date_to_polish_months, convert_date_to_weekday
 from constants import flags_emojis, race_place_html_adress
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 from table2ascii import table2ascii as t2a, PresetStyle
 
 def current_race_week_html_data(calendar_url = "https://f1calendar.com/pl"):
@@ -116,7 +116,7 @@ def add_missing_values(thead_cols, session_results): # filling in the blanks of 
     return session_results
 
 class RaceWeek:
-    def __init__(self, race_html = current_race_week_html_data("https://f1calendar.com/pl"), f3 = False):
+    def __init__(self, race_html = current_race_week_html_data(), f3 = False):
         self.id = race_html.get('id')
         if f3 is True:
             race_html = current_race_week_html_data("https://f3calendar.com/pl")
@@ -213,14 +213,13 @@ class RaceWeek:
             self.time = time
             current_datetime = datetime.now()
             self.datetime = datetime.strptime(f"{self.date} {self.time} {current_datetime.year}", "%d %b %H:%M %Y")
-            if self.session_name in ["FP1", "FP2", "FP3","Pierwszy trening", 'Drugi trening', 'Trzeci trening', 'Sprint', 'Feature']: 
-                self.duration = timedelta(hours=1, minutes=15)
-            elif self.session_name in ['Kwalifikacje', 'Sprint Qualifying', 'Trening']:
-                self.duration = timedelta(hours=1, minutes=0)
-            elif self.session_name == 'Wyścig':
+            if self.session_name in ["Pierwszy trening", 'Drugi trening', 'Trzeci trening', 'Sprint', 'Feature', 'Kwalifikacje', 'Sprint Qualifying', 'Trening', 'Qualifying', 'Free Practice 1', 'Free Practice 2', 'Free Practice 3']:
+                self.duration = timedelta(hours=1, minutes=5)
+            elif self.session_name in ['Wyścig', 'Grand Prix']:
                 self.duration = timedelta(hours=1, minutes=50)
         
-        def check_session_status(self, current_datetime=datetime.now()): 
+        def check_session_status(self, current_datetime=datetime.now()): #return emote string (xd)
+            
             if self.datetime < current_datetime:
                 if current_datetime - self.datetime > self.duration:
                     return "⚫"
