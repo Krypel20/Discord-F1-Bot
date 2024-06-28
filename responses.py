@@ -25,7 +25,7 @@ def handle_response(message) ->str: # stupid, uncensored bot responses to user m
         return '??'
     
     if p_message.startswith('aha'):
-        return f'# aha{random.randint(1, 100)}'
+        return f'### aha{random.randint(1, 100)}'
     
     if p_message.startswith('przeproś'):
         return f'przepraszam że jestem cwelem :clown:'
