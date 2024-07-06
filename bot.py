@@ -384,8 +384,10 @@ def run_discord_bot():
     client.run(TOKEN)
 
 # test
+# print('f3')
 # for session in f3_week.sessions:
-#     print(session.session_name, session.time_left())
+#     print(f"{session.session_name}, {session.datetime}")
 
+# print('f1')
 # for session in f1_week.sessions:
-#     print(session.session_name, session.time_left())
+#     print(f"{session.session_name}, {session.datetime}")

@@ -136,8 +136,13 @@ class RaceWeek:
         self.week_end = datesPL[-1]
         date_times = [time.text for time in date_times]
         date_times = convert_to_Warsaw_time(date_times)
-        if len(date_times)>5: #if the prased website is not updated correctly race date may be on the first and last position in the table
+        
+        #if the prased website is not updated correctly race date may be on the first and last position in the table
+        if len(date_times)>5 and f3 == False: 
             date_times.pop(0)
+        if len(date_times)>4 and f3 == True:
+            date_times.pop(0)
+            
         self.race_week_datetimes = list(zip(session_names, dates, date_times))
         self.sessions = []
         
